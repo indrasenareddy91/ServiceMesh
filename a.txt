@@ -1,3 +1,6 @@
+Set-PSReadlineOption -HistorySaveStyle SaveNothing
+
+
 def load_transactions(filename):
     """
     Load transactions from a text file.
