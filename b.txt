@@ -1,0 +1,89 @@
+# Hash-based Apriori Implementation
+
+def load_txns(filename):
+    txns = []
+    with open(filename, "r") as f:
+        for line in f:
+            parts = line.strip().split()
+            if len(parts) < 2:
+                continue
+            items = list(parts[1:])
+            txns.append(items)
+    return txns
+
+def get_support(itemset, txns):
+    """Return support percentage of an itemset."""
+    count = 0
+    for t in txns:
+        if all(i in t for i in itemset):
+            count += 1
+    return (count / len(txns)) * 100
+
+def hash_func(itemset, num_buckets=20):
+    """Simple hash function for itemsets."""
+    return sum(ord(x) for x in itemset) % num_buckets
+
+def gen_cand(Lk, k, txns, min_sup, num_buckets=20):
+    """Generate candidate (k+1)-itemsets with hashing + pruning."""
+    candidates = []
+    n = len(Lk)
+
+    # --- Step 1: Build hash buckets ---
+    buckets = [0] * num_buckets
+    for t in txns:
+        for i in range(len(t)):
+            for j in range(i + 1, len(t)):
+                cand = sorted([t[i], t[j]])
+                h = hash_func(cand, num_buckets)
+                buckets[h] += 1
+
+    # --- Step 2: Generate (k+1)-itemset candidates ---
+    for i in range(n):
+        for j in range(i + 1, n):
+            if Lk[i][:k-1] == Lk[j][:k-1]:
+                union = sorted(list(set(Lk[i]) | set(Lk[j])))
+                if len(union) == k + 1 and union not in candidates:
+                    # Check hash bucket
+                    h = hash_func(union, num_buckets)
+                    if buckets[h] >= (min_sup/100) * len(txns):
+                        # Prune: check all subsets are frequent
+                        valid = True
+                        for m in range(len(union)):
+                            subset = union[:m] + union[m+1:]
+                            if subset not in Lk:
+                                valid = False
+                                break
+                        if valid:
+                            candidates.append(union)
+    return candidates
+
+def apriori(txns, min_sup, num_buckets=20):
+    # Step 1: Generate frequent 1-itemsets
+    items = sorted({i for t in txns for i in t})
+    current_L = [[i] for i in items]
+    all_frequent = []
+    k = 1
+
+    while current_L:
+        Lk = []
+        for itemset in current_L:
+            sup = get_support(itemset, txns)
+            if sup >= min_sup:
+                Lk.append(itemset)
+                all_frequent.append((itemset, sup))
+
+        # Generate next candidates with hash-based pruning
+        current_L = gen_cand(Lk, k, txns, min_sup, num_buckets)
+        k += 1
+
+    return all_frequent
+
+
+# Example usage
+txns = load_txns("td2.txt")
+min_sup = 50
+frequent_itemsets = apriori(txns, min_sup)
+
+print("Frequent Itemsets (Hash-based Apriori):")
+for itemset, sup in frequent_itemsets:
+    print(itemset, sup)

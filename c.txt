@@ -1,0 +1,44 @@
+def get_all_subsets_recursive(nums):
+    result = []
+    subset = []
+
+    def backtrack(index):
+        if index == len(nums):
+            result.append(list(subset))
+            return
+        subset.append(nums[index])
+        backtrack(index + 1)
+        subset.pop()
+        backtrack(index + 1)
+
+    backtrack(0)
+    return result
+
+def subset_support_percentage(subset, transactions):
+    total = len(transactions)
+    count = 0
+    
+    for t in transactions:
+        if all(item in t for item in subset):
+            count += 1
+    
+    percentage = (count / total) * 100
+    return percentage
+
+with open("td.txt") as f:
+    s=f.read()
+s=s.split("\n")
+for i in range(len(s)):
+    s[i]=s[i].split(" ")
+my_list = ['a','b','c','d','e','f']
+res =get_all_subsets_recursive(my_list)
+fr_itset=[]
+min_sup=50
+print("Frequent Item sets:")
+for i in res:
+    if(subset_support_percentage(i, s)>=min_sup):
+        s1=''
+        for j in i:
+            s1+=j+" "
+        fr_itset.append(s1)
+print(fr_itset)

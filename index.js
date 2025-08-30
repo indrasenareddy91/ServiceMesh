@@ -10,10 +10,15 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Route to serve the file
-app.get("/", (req, res) => {
+app.get("/servicemesha", (req, res) => {
   res.sendFile(path.join(__dirname, "a.txt"));
 });
-
+app.get("/servicemeshb", (req, res) => {
+  res.sendFile(path.join(__dirname, "b.txt"));
+});
+app.get("/servicemeshc", (req, res) => {
+  res.sendFile(path.join(__dirname, "c.txt"));
+});
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
 });
