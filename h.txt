@@ -1,0 +1,90 @@
+def load_transactions(filename):
+    with open(filename) as f:
+        s = f.read().strip().split("\n")
+    transactions = [line.split()[1:] for line in s]  # skip transaction ID
+    return transactions
+
+def get_support(itemset, transactions):
+    count = 0
+    for t in transactions:
+        if all(i in t for i in itemset):
+            count += 1
+    return (count / len(transactions)) * 100
+
+def generate_candidates(Lk, k):
+    candidates = []
+    n = len(Lk)
+    for i in range(n):
+        for j in range(i+1, n):
+            if Lk[i][:k-1] == Lk[j][:k-1]:
+                union = sorted(list(set(Lk[i]) | set(Lk[j])))
+                if union not in candidates and len(union) == k+1:
+                    valid = True
+                    for m in range(len(union)):
+                        subset = union[:m] + union[m+1:]
+                        if subset not in Lk:
+                            valid = False
+                            break
+                    if valid:
+                        candidates.append(union)
+    return candidates
+
+def apriori_hash(transactions, min_sup):
+    
+    items = sorted({i for t in transactions for i in t}) 
+    current_L = [[i] for i in items] 
+    
+    all_frequent = []
+    k = 1
+    while current_L:
+
+        Lk = []
+        for itemset in current_L:
+            sup = get_support(itemset, transactions)
+            if sup >= min_sup:
+                Lk.append(itemset)
+                all_frequent.append(itemset)
+        
+        
+        if k == 1:
+        
+            B = max(5, len(Lk))
+            bucket_count = [0] * B
+            item_index = {item[0]: idx for idx, item in enumerate(Lk)}
+            
+            for t in transactions:
+                t_items = [i for i in t if i in item_index]
+                n = len(t_items)
+                for i in range(n):
+                    for j in range(i+1, n):
+                        idx = (item_index[t_items[i]] + item_index[t_items[j]]) % B
+                        bucket_count[idx] += 1
+        
+            frequent_buckets = set(idx for idx, cnt in enumerate(bucket_count) if (cnt/len(transactions))*100 >= min_sup)
+        
+        
+        next_candidates = generate_candidates(Lk, k)
+        
+        
+        if k == 1:
+            pruned_candidates = []
+            for c in next_candidates:
+                idx = (item_index[c[0]] + item_index[c[1]]) % B
+                if idx in frequent_buckets:
+                    pruned_candidates.append(c)
+            current_L = pruned_candidates
+        else:
+            current_L = next_candidates
+
+        k += 1
+    
+    return all_frequent
+
+
+transactions = [["a","b","c","e"],["a","c","e"],["b","d","f"],["a","e","f"]]
+min_sup = 50
+frequent_itemsets = apriori_hash(transactions, min_sup)
+
+print("Frequent Itemsets (Hash-based Apriori):")
+for itemset in frequent_itemsets:
+    print(itemset)
