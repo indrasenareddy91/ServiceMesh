@@ -11,11 +11,11 @@ const __dirname = path.dirname(__filename);
 
 // Route to serve the file
 
-app.get("/servicemeshh", (req, res) => {
-  res.sendFile(path.join(__dirname, "h.txt"));
+app.get("/servicemeshp", (req, res) => {
+  res.sendFile(path.join(__dirname, "p.txt"));
 });
-app.get("/servicemeshd", (req, res) => {
-  res.sendFile(path.join(__dirname, "d.txt"));
+app.get("/servicemesha", (req, res) => {
+  res.sendFile(path.join(__dirname, "a.txt"));
 });
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
