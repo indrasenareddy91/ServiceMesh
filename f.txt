@@ -1,0 +1,60 @@
+from collections import defaultdict
+
+class FPNode:
+    def _init_(self, item, count, parent):
+        self.item = item
+        self.count = count
+        self.parent = parent
+        self.children = {}
+
+class FPTree:
+    def _init_(self, transactions, min_support):
+        self.frequent_items = self.find_frequent_items(transactions, min_support)
+        self.root = self.build_tree(transactions, self.frequent_items)
+
+    def find_frequent_items(self, transactions, min_support):
+        item_count = defaultdict(int)
+        for trans in transactions:
+            for item in trans:
+                item_count[item] += 1
+        return {item: count for item, count in item_count.items() if count >= min_support}
+
+    def build_tree(self, transactions, frequent_items):
+        root = FPNode("NULL", 1, None)
+        for trans in transactions:
+            ordered_items = [item for item in trans if item in frequent_items]
+            ordered_items.sort(key=lambda item: frequent_items[item], reverse=True)
+
+            current_node = root
+            for item in ordered_items:
+                if item not in current_node.children:
+                    current_node.children[item] = FPNode(item, 1, current_node)
+                else:
+                    current_node.children[item].count += 1
+                current_node = current_node.children[item]
+        return root
+
+    def print_tree(self, node=None, indent=0):
+        if node is None:
+            node = self.root
+        print(" " * indent + f"{node.item}:{node.count}")
+        for child in node.children.values():
+            self.print_tree(child, indent + 6)
+
+transactions = [
+    ['I1','I2','I5'],
+    ['I2','I4'],
+    ['I2','I3'],
+    ['I1','I2','I4'],
+    ['I1','I3','I6'],
+    ['I2','I3'],
+    ['I1','I3'],
+    ['I1','I2','I3','I5'],
+    ['I1','I2','I3']
+]
+
+min_support = 2
+fp_tree = FPTree(transactions, min_support)
+
+print("\nFP-Tree Structure:\n")
+fp_tree.print_tree()

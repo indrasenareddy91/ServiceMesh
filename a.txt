@@ -1,3 +1,4 @@
+# Function to calculate support of an itemset
 def get_support(itemset, transactions):
     count = 0
     for t in transactions:
@@ -5,15 +6,34 @@ def get_support(itemset, transactions):
             count += 1
     return count / len(transactions)
 
-def combinations(lst, r):
-    if r == 0:
-        return [[]]
-    result = []
-    for i in range(len(lst)):
-        for tail in combinations(lst[i+1:], r-1):
-            result.append([lst[i]] + tail)
-    return result
 
+# Function to generate combinations (non-recursive, loop-based)
+def combinations(lst, r):
+    n = len(lst)
+    result = []
+    if r > n:
+        return result
+
+    indices = list(range(r))   # [0,1,2,...,r-1]
+
+    while True:
+        # pick elements at current indices
+        subset = [lst[i] for i in indices]
+        result.append(subset)
+
+        # move to next combination
+        for i in reversed(range(r)):
+            if indices[i] != i + n - r:
+                break
+        else:
+            return result   # finished
+
+        indices[i] += 1
+        for j in range(i+1, r):
+            indices[j] = indices[j-1] + 1
+
+
+# Function to generate candidate itemsets C(k+1) from frequent Lk
 def generate_candidates(Lk, k):
     candidates = []
     n = len(Lk)
@@ -32,7 +52,10 @@ def generate_candidates(Lk, k):
                         candidates.append(union)
     return candidates
 
+
+# Apriori algorithm
 def apriori(transactions, min_sup):
+    # Collect all unique items excluding transaction IDs
     items = sorted({i for t in transactions for i in t if not i.startswith("T")})
     current_L = [[i] for i in items]
     
@@ -49,11 +72,14 @@ def apriori(transactions, min_sup):
         k += 1
     return all_frequent
 
+
+# Function to generate association rules
 def generate_association_rules(frequent_itemsets, min_conf=0.5):
     rules = []
     for itemset, sup in frequent_itemsets.items():
         if len(itemset) < 2:
             continue
+        # Generate all non-empty proper subsets
         for i in range(1, len(itemset)):
             for left in combinations(list(itemset), i):
                 right = sorted(list(set(itemset) - set(left)))
@@ -62,6 +88,8 @@ def generate_association_rules(frequent_itemsets, min_conf=0.5):
                     rules.append((left, right, sup, conf))
     return rules
 
+
+# Example Usage
 transactions = [
     ["T1","a","b","c","e"],
     ["T2","a","c","e"],
@@ -69,13 +97,14 @@ transactions = [
     ["T4","a","e","f"]
 ]
 
-min_sup = 0.5  
+min_sup = 0.5   # 50% support
 frequent_itemsets = apriori(transactions, min_sup)
 
 print("Frequent Itemsets:")
 for itemset, sup in frequent_itemsets.items():
     print(list(itemset), "->", round(sup*100,2), "%")
 
+print("\nAssociation Rules (min_conf = 0.5):")
 rules = generate_association_rules(frequent_itemsets, min_conf=0.5)
 for left, right, sup, conf in rules:
     print(f"{list(left)} -> {list(right)} | support={round(sup*100,2)}% | confidence={round(conf*100,2)}%")
