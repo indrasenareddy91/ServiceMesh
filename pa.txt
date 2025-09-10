@@ -1,0 +1,98 @@
+def generate_candidates(Lk, k):
+    candidates = []
+    n = len(Lk)
+    for i in range(n):
+        for j in range(i+1, n):
+            if Lk[i][:k-1] == Lk[j][:k-1]:
+                union = sorted(list(set(Lk[i]) | set(Lk[j])))
+                if union not in candidates and len(union) == k+1:
+                    valid = True
+                    for m in range(len(union)):
+                        subset = union[:m] + union[m+1:]
+                        if subset not in Lk:
+                            valid = False
+                            break
+                    if valid:
+                        candidates.append(union)
+    return candidates
+
+def get_support_counts(candidates, transactions):
+    counts = {}
+    for candidate in candidates:
+        count = 0
+        for transaction in transactions:
+            all_present = True
+            for item in candidate:
+                if item not in transaction:
+                    all_present = False
+                    break
+            if all_present:
+                count += 1
+        counts[tuple(candidate)] = count
+    return counts
+
+def apriori_partition(transactions, min_sup):
+    items = sorted({i for t in transactions for i in t if not i.startswith("T")})
+    current_L = [[i] for i in items]
+    local_frequents = []
+    k = 1
+    while current_L:
+        Lk = []
+        for itemset in current_L:
+            count = 0
+            for t in transactions:
+                if all(i in t for i in itemset):
+                    count += 1
+            sup = (count / len(transactions)) * 100
+            if sup >= min_sup:
+                Lk.append(itemset)
+                local_frequents.append(itemset)
+        current_L = generate_candidates(Lk, k)
+        k += 1
+    return local_frequents
+
+def partition_based(transactions, min_sup, num_partitions=2):
+    n = len(transactions)
+    partition_size = n // num_partitions
+    candidate_sets = []
+    partitions = []
+    
+    for i in range(num_partitions):
+        start = i * partition_size
+        if i == num_partitions - 1:
+            end = n
+        else:
+            end = (i + 1) * partition_size
+        partition = transactions[start:end]
+        partitions.append(partition)
+    
+    for partition in partitions:
+        local_frequents = apriori_partition(partition, min_sup)
+        for itemset in local_frequents:
+            if itemset not in candidate_sets:
+                candidate_sets.append(itemset)
+    
+    support_count = get_support_counts(candidate_sets, transactions)
+    
+    global_frequents = []
+    for candidate in candidate_sets:
+        key = tuple(candidate)
+        sup = (support_count.get(key, 0) / len(transactions)) * 100
+        if sup >= min_sup:
+            global_frequents.append((candidate, sup))
+    
+    return global_frequents
+
+transactions = [
+    ["T1","a","b","c","e"],
+    ["T2","a","c","e"],
+    ["T3","b","d","f"],
+    ["T4","a","e","f"]
+]
+
+min_sup = 50
+frequent_itemsets = partition_based(transactions, min_sup, num_partitions=2)
+
+print("Frequent Itemsets:")
+for itemset, sup in frequent_itemsets:
+    print(itemset, "->", round(sup,2), "%")
