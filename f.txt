@@ -1,112 +1,145 @@
-def find_frequent_items(transactions, min_support):
-    item_count = {}
-    for trans in transactions:
-        for item in trans:
-            item_count[item] = item_count.get(item, 0) + 1
-    frequent_items = {}
-    for item in item_count:
-        if item_count[item] >= min_support:
-            frequent_items[item] = item_count[item]
-    return frequent_items
+def my_ceil(x):
+    if int(x) == x:
+        return int(x)
+    else:
+        return int(x) + 1
 
-def build_fp_tree(transactions, frequent_items):
-    root = {'item': 'NULL', 'count': 1, 'children': {}, 'parent': None}
-    for trans in transactions:
-        ordered_items = [item for item in trans if item in frequent_items]
-        ordered_items.sort(key=lambda item: frequent_items[item], reverse=True)
 
-        current_node = root
-        for item in ordered_items:
-            if item not in current_node['children']:
-                current_node['children'][item] = {
-                    'item': item,
-                    'count': 1,
-                    'children': {},
-                    'parent': current_node
-                }
+class FPNode:
+    def _init_(self, item, count, parent):
+        self.item = item
+        self.count = count
+        self.parent = parent
+        self.children = {}
+        self.node_link = None
+
+
+class FPTree:
+    def _init_(self):
+        self.root = FPNode(None, 0, None)
+        self.header_table = {}
+
+    def add_transaction(self, transaction):
+        current = self.root
+        for item in transaction:
+            if item in current.children:
+                current.children[item].count += 1
             else:
-                current_node['children'][item]['count'] += 1
-            current_node = current_node['children'][item]
-    return root
+                new_node = FPNode(item, 1, current)
+                current.children[item] = new_node
 
-def find_prefix_paths(base_item, tree):
-    paths = [] 
-    nodes_to_visit = []
+                # link in header table
+                if item in self.header_table:
+                    node = self.header_table[item]
+                    while node.node_link is not None:
+                        node = node.node_link
+                    node.node_link = new_node
+                else:
+                    self.header_table[item] = new_node
+            current = current.children[item]
 
-    def collect_nodes(node):
-        if node['item'] == base_item:
-            nodes_to_visit.append(node)
-        for child in node['children'].values():
-            collect_nodes(child)
 
-    collect_nodes(tree)
+def get_frequent_items(transactions, minsup_count):
+    freq = {}
+    for t in transactions:
+        for item in t:
+            if item in freq:
+                freq[item] += 1
+            else:
+                freq[item] = 1
 
-    for node in nodes_to_visit:
-        path = []
-        count = node['count']
-        parent = node['parent']
-        while parent is not None and parent['item'] != 'NULL':
-            path.append(parent['item'])
-            parent = parent['parent']
+    
+    result = {}
+    for k in freq:
+        if freq[k] >= minsup_count:
+            result[k] = freq[k]
+
+    
+    items = list(result.items())
+    for i in range(len(items)):
+        for j in range(i + 1, len(items)):
+            if items[i][1] < items[j][1] or (items[i][1] == items[j][1] and items[i][0] > items[j][0]):
+                items[i], items[j] = items[j], items[i]
+
+    sorted_dict = {}
+    for k, v in items:
+        sorted_dict[k] = v
+    return sorted_dict
+
+
+def build_fp_tree(transactions, minsup_count):
+    freq_items = get_frequent_items(transactions, minsup_count)
+    tree = FPTree()
+
+    for t in transactions:
+        filtered = []
+        for i in t:
+            if i in freq_items:
+                filtered.append(i)
+
+        
+        sorted_items = []
+        for key in freq_items:
+            if key in filtered:
+                sorted_items.append(key)
+
+        if len(sorted_items) > 0:
+            tree.add_transaction(sorted_items)
+
+    return tree, freq_items
+
+
+def ascend_fp_tree(node):
+    path = []
+    while node.parent is not None and node.parent.item is not None:
+        node = node.parent
+        path.append(node.item)
+    return path
+
+def find_prefix_paths(base_pat, node):
+    cond_pats = []
+    while node is not None:
+        path = ascend_fp_tree(node)
         if len(path) > 0:
-            paths.append((list(reversed(path)), count))
-    return paths
+            cond_pats.append((path, node.count))
+        node = node.node_link
+    return cond_pats
 
-def build_conditional_tree(paths, min_support):
 
-    cond_transactions = []
-    for path, count in paths:
-        for _ in range(count):  
-            cond_transactions.append(path)
+def mine_fp_tree(tree, freq_items, minsup_count, prefix, frequent_patterns):
+    
+    items = list(freq_items.items())
+    for i in range(len(items)):
+        for j in range(i + 1, len(items)):
+            if items[i][1] > items[j][1] or (items[i][1] == items[j][1] and items[i][0] > items[j][0]):
+                items[i], items[j] = items[j], items[i]
 
-    if not cond_transactions:
-        return None, {}
+    for base, count in items:
+        new_pattern = prefix + [base]
+        frequent_patterns.append((new_pattern, count))
 
-    frequent_items = find_frequent_items(cond_transactions, min_support)
-    if not frequent_items:
-        return None, {}
+        cond_pats = find_prefix_paths(base, tree.header_table[base])
+        cond_trans = []
+        for path, c in cond_pats:
+            for _ in range(c):
+                cond_trans.append(path)
 
-    cond_tree = build_fp_tree(cond_transactions, frequent_items)
-    return cond_tree, frequent_items
+        cond_tree, cond_freq = build_fp_tree(cond_trans, minsup_count)
+        if len(cond_freq) > 0:
+            mine_fp_tree(cond_tree, cond_freq, minsup_count, new_pattern, frequent_patterns)
 
-def mine_tree(tree, frequent_items, min_support, prefix, frequent_itemsets):
 
-    sorted_items = sorted(frequent_items.items(), key=lambda x: x[1])
-    for item, support in sorted_items:
-        new_itemset = prefix + [item]
-        frequent_itemsets.append((new_itemset, support))
-        paths = find_prefix_paths(item, tree)
-        cond_tree, cond_frequent_items = build_conditional_tree(paths, min_support)
-        if cond_tree is not None:
-            mine_tree(cond_tree, cond_frequent_items, min_support, new_itemset, frequent_itemsets)
+def fp_growth(transactions, minsup_percent):
+    n = len(transactions)
+    minsup_count = my_ceil((minsup_percent / 100.0) * n)
+    tree, freq_items = build_fp_tree(transactions, minsup_count)
+    frequent_patterns = []
+    mine_fp_tree(tree, freq_items, minsup_count, [], frequent_patterns)
+    return frequent_patterns
 
-def print_fp_tree(node, indent=0):
-    print(" " * indent + f"{node['item']}:{node['count']}")
-    for child in node['children'].values():
-        print_fp_tree(child, indent + 6)
 
-transactions = [
-    ['I1','I2','I5'],
-    ['I2','I4'],
-    ['I2','I3'],
-    ['I1','I2','I4'],
-    ['I1','I3','I6'],
-    ['I2','I3'],
-    ['I1','I3'],
-    ['I1','I2','I3','I5'],
-    ['I1','I2','I3']
-]
+transactions = [["T1","a","b","c","e"],["T2","a","c","e"],["T3","b","d","f"],["T4","a","e","f"]]
 
-min_support = 2
-frequent_items = find_frequent_items(transactions, min_support)
-fp_tree_root = build_fp_tree(transactions, frequent_items)
-
-print("\nFP-Tree Structure:\n")
-print_fp_tree(fp_tree_root)
-
-frequent_itemsets = []
-mine_tree(fp_tree_root, frequent_items, min_support, [], frequent_itemsets)
-
-print("\nFrequent Itemsets:")
-for items, support in frequent_itemsets:
-    print(items, "support:", support)
+patterns = fp_growth(transactions, minsup_percent=50)  
+for pat, sup in patterns:
+    print(pat, ":", sup)
