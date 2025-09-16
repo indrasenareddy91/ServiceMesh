@@ -1,110 +1,112 @@
-# Function to calculate support of an itemset
-def get_support(itemset, transactions):
-    count = 0
-    for t in transactions:
-        if all(i in t for i in itemset):
-            count += 1
-    return count / len(transactions)
+def find_frequent_items(transactions, min_support):
+    item_count = {}
+    for trans in transactions:
+        for item in trans:
+            item_count[item] = item_count.get(item, 0) + 1
+    frequent_items = {}
+    for item in item_count:
+        if item_count[item] >= min_support:
+            frequent_items[item] = item_count[item]
+    return frequent_items
 
+def build_fp_tree(transactions, frequent_items):
+    root = {'item': 'NULL', 'count': 1, 'children': {}, 'parent': None}
+    for trans in transactions:
+        ordered_items = [item for item in trans if item in frequent_items]
+        ordered_items.sort(key=lambda item: frequent_items[item], reverse=True)
 
-# Function to generate combinations (non-recursive, loop-based)
-def combinations(lst, r):
-    n = len(lst)
-    result = []
-    if r > n:
-        return result
+        current_node = root
+        for item in ordered_items:
+            if item not in current_node['children']:
+                current_node['children'][item] = {
+                    'item': item,
+                    'count': 1,
+                    'children': {},
+                    'parent': current_node
+                }
+            else:
+                current_node['children'][item]['count'] += 1
+            current_node = current_node['children'][item]
+    return root
 
-    indices = list(range(r))   # [0,1,2,...,r-1]
+def find_prefix_paths(base_item, tree):
+    paths = [] 
+    nodes_to_visit = []
 
-    while True:
-        # pick elements at current indices
-        subset = [lst[i] for i in indices]
-        result.append(subset)
+    def collect_nodes(node):
+        if node['item'] == base_item:
+            nodes_to_visit.append(node)
+        for child in node['children'].values():
+            collect_nodes(child)
 
-        # move to next combination
-        for i in reversed(range(r)):
-            if indices[i] != i + n - r:
-                break
-        else:
-            return result   # finished
+    collect_nodes(tree)
 
-        indices[i] += 1
-        for j in range(i+1, r):
-            indices[j] = indices[j-1] + 1
+    for node in nodes_to_visit:
+        path = []
+        count = node['count']
+        parent = node['parent']
+        while parent is not None and parent['item'] != 'NULL':
+            path.append(parent['item'])
+            parent = parent['parent']
+        if len(path) > 0:
+            paths.append((list(reversed(path)), count))
+    return paths
 
+def build_conditional_tree(paths, min_support):
 
-# Function to generate candidate itemsets C(k+1) from frequent Lk
-def generate_candidates(Lk, k):
-    candidates = []
-    n = len(Lk)
-    for i in range(n):
-        for j in range(i+1, n):
-            if Lk[i][:k-1] == Lk[j][:k-1]:
-                union = sorted(list(set(Lk[i]) | set(Lk[j])))
-                if union not in candidates and len(union) == k+1:
-                    valid = True
-                    for m in range(len(union)):
-                        subset = union[:m] + union[m+1:]
-                        if subset not in Lk:
-                            valid = False
-                            break
-                    if valid:
-                        candidates.append(union)
-    return candidates
+    cond_transactions = []
+    for path, count in paths:
+        for _ in range(count):  
+            cond_transactions.append(path)
 
+    if not cond_transactions:
+        return None, {}
 
-# Apriori algorithm
-def apriori(transactions, min_sup):
-    # Collect all unique items excluding transaction IDs
-    items = sorted({i for t in transactions for i in t if not i.startswith("T")})
-    current_L = [[i] for i in items]
-    
-    all_frequent = {}
-    k = 1
-    while current_L:
-        Lk = []
-        for itemset in current_L:
-            sup = get_support(itemset, transactions)
-            if sup >= min_sup:
-                Lk.append(itemset)
-                all_frequent[tuple(itemset)] = sup
-        current_L = generate_candidates(Lk, k)
-        k += 1
-    return all_frequent
+    frequent_items = find_frequent_items(cond_transactions, min_support)
+    if not frequent_items:
+        return None, {}
 
+    cond_tree = build_fp_tree(cond_transactions, frequent_items)
+    return cond_tree, frequent_items
 
-# Function to generate association rules
-def generate_association_rules(frequent_itemsets, min_conf=0.5):
-    rules = []
-    for itemset, sup in frequent_itemsets.items():
-        if len(itemset) < 2:
-            continue
-        # Generate all non-empty proper subsets
-        for i in range(1, len(itemset)):
-            for left in combinations(list(itemset), i):
-                right = sorted(list(set(itemset) - set(left)))
-                conf = sup / frequent_itemsets.get(tuple(sorted(left)), 1e-9)
-                if conf >= min_conf:
-                    rules.append((left, right, sup, conf))
-    return rules
+def mine_tree(tree, frequent_items, min_support, prefix, frequent_itemsets):
 
+    sorted_items = sorted(frequent_items.items(), key=lambda x: x[1])
+    for item, support in sorted_items:
+        new_itemset = prefix + [item]
+        frequent_itemsets.append((new_itemset, support))
+        paths = find_prefix_paths(item, tree)
+        cond_tree, cond_frequent_items = build_conditional_tree(paths, min_support)
+        if cond_tree is not None:
+            mine_tree(cond_tree, cond_frequent_items, min_support, new_itemset, frequent_itemsets)
 
-# Example Usage
+def print_fp_tree(node, indent=0):
+    print(" " * indent + f"{node['item']}:{node['count']}")
+    for child in node['children'].values():
+        print_fp_tree(child, indent + 6)
+
 transactions = [
-    ["T1","a","b","c","e"],
-    ["T2","a","c","e"],
-    ["T3","b","d","f"],
-    ["T4","a","e","f"]
+    ['I1','I2','I5'],
+    ['I2','I4'],
+    ['I2','I3'],
+    ['I1','I2','I4'],
+    ['I1','I3','I6'],
+    ['I2','I3'],
+    ['I1','I3'],
+    ['I1','I2','I3','I5'],
+    ['I1','I2','I3']
 ]
 
-min_sup = 0.5   # 50% support
-frequent_itemsets = apriori(transactions, min_sup)
+min_support = 2
+frequent_items = find_frequent_items(transactions, min_support)
+fp_tree_root = build_fp_tree(transactions, frequent_items)
 
-print("Frequent Itemsets:")
-for itemset, sup in frequent_itemsets.items():
-    print(list(itemset), "->", round(sup*100,2), "%")
+print("\nFP-Tree Structure:\n")
+print_fp_tree(fp_tree_root)
 
-print("\nAssociation Rules (min_conf = 0.5):")
-rules = generate_association_rules(frequent_itemsets, min_conf=0.5)
-for left, right, sup, conf in rules:
-    print(f"{list(left)} -> {list(right)} | support={round(sup*100,2)}% | confidence={round(conf*100,2)}%")
+frequent_itemsets = []
+mine_tree(fp_tree_root, frequent_items, min_support, [], frequent_itemsets)
+
+print("\nFrequent Itemsets:")
+for items, support in frequent_itemsets:
+    print(items, "support:", support)
