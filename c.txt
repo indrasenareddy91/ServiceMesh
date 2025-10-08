@@ -1,0 +1,66 @@
+# closed_frequent_dfs
+
+def load_transactions(filename):
+    """Load transactions from file. Each line: TID item1 item2 ..."""
+    transactions = []
+    with open(filename, 'r') as f:
+        for line in f:
+            parts = line.strip().split()
+            if len(parts) > 1:
+                transactions.append(set(parts[1:]))  # skip TID
+    return transactions
+
+
+def support_count(itemset, transactions):
+    """Count how many transactions contain the given itemset."""
+    return sum(1 for t in transactions if itemset.issubset(t))
+
+
+def dfs_closed(current_set, items, transactions, min_sup, closed_sets):
+    """Depth-first enumeration of closed frequent itemsets."""
+    extended = False
+    current_sup = support_count(current_set, transactions)
+
+    for i, item in enumerate(items):
+        new_set = current_set | {item}
+        sup = support_count(new_set, transactions)
+        if sup >= min_sup:
+            extended = True
+            dfs_closed(new_set, items[i+1:], transactions, min_sup, closed_sets)
+
+    # If no extension found, current_set is a candidate
+    if not extended:
+        # Add if not subset of any existing closed set with same support
+        if not any(current_set < cs and current_sup == support_count(cs, transactions)
+                   for cs in closed_sets):
+            closed_sets.append(current_set)
+
+
+def find_closed_frequent_itemsets(transactions, min_sup):
+    """Main driver to find closed frequent itemsets."""
+    items = sorted({item for t in transactions for item in t})
+    closed_sets = []
+    dfs_closed(set(), items, transactions, min_sup, closed_sets)
+    return closed_sets
+
+
+# ------------------------------------------------------------
+# Example usage
+# ------------------------------------------------------------
+if _name_ == "_main_":
+    # Example td.txt content:
+    # T1 a b c d
+    # T2 a c
+    # T3 a c d
+    # T4 b
+    # T5 a b c e
+    # T10 d e
+
+    transactions = load_transactions("td.txt")
+    min_sup = 2  # can set as needed
+
+    closed_sets = find_closed_frequent_itemsets(transactions, min_sup)
+
+    print("\nClosed Frequent Itemsets (min_sup = {})".format(min_sup))
+    for s in closed_sets:
+        print(f"{sorted(s)} -> support = {support_count(s, transactions)}")

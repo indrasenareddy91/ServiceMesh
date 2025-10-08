@@ -1,0 +1,117 @@
+from collections import defaultdict
+import os
+from itertools import combinations
+
+td_content = """T1 a b c d
+T2 a c
+T3 a c d
+T4 b
+T5 a b c e
+T6 a b c
+T7 b c d
+T8 b c e
+T9 d e
+T10 d e
+"""
+with open("td.txt", "w") as f:
+    f.write(td_content)
+
+def load_transactions_vertical(filename):
+    transactions = []
+    items = set()
+    with open(filename) as f:
+        for line in f:
+            parts = line.strip().split()
+            if not parts:
+                continue
+            trans_items = parts[1:]
+            transactions.append(trans_items)
+            items.update(trans_items)
+    n = len(transactions)
+    item_to_bitmap = {}
+    for item in sorted(items):
+        bitmask = 0
+        for i, trans in enumerate(transactions):
+            if item in trans:
+                bitmask |= (1 << i)
+        item_to_bitmap[item] = bitmask
+    return transactions, item_to_bitmap, n
+
+transactions, item_to_bitmap, n_trans = load_transactions_vertical("td.txt")
+print(f"Loaded {n_trans} transactions and {len(item_to_bitmap)} distinct items.")
+print("Items:", sorted(item_to_bitmap.keys()))
+
+def support_of_bitmap(bitmap):
+    return bitmap.bit_count()
+
+def bitmap_and(b1, b2):
+    return b1 & b2
+
+def hutmfi_prune_possible(head_set, tail_list, MFI):
+    union_set = set(head_set) | set(tail_list)
+    for mfi in MFI:
+        if union_set.issubset(mfi):
+            return True
+    return False
+
+def add_mfi(new_set, MFI):
+    MFI[:] = [m for m in MFI if not (set(m).issubset(new_set))]
+    if not any(set(new_set).issubset(set(m)) for m in MFI):
+        MFI.append(tuple(sorted(new_set)))
+
+def mafia(head, head_bitmap, tail_items, item_bitmaps, min_sup, MFI):
+    if hutmfi_prune_possible(head, tail_items, MFI):
+        return
+    extensions = []
+    head_sup = support_of_bitmap(head_bitmap)
+    for item in tail_items:
+        b = bitmap_and(head_bitmap, item_bitmaps[item]) if head else item_bitmaps[item]
+        s = support_of_bitmap(b)
+        if s >= min_sup:
+            extensions.append((item, b, s))
+    if not extensions:
+        add_mfi(tuple(sorted(head)), MFI)
+        return
+    extensions.sort(key=lambda x: (x[2], x[0]))
+    merged_into_head = []
+    new_tail = [item for item, _, _ in extensions]
+    i = 0
+    while i < len(new_tail):
+        item = new_tail[i]
+        b = bitmap_and(head_bitmap, item_bitmaps[item]) if head else item_bitmaps[item]
+        s = support_of_bitmap(b)
+        if head_sup != 0 and s == head_sup:
+            head = head + [item]
+            head_bitmap = b
+            merged_into_head.append(item)
+            new_tail.pop(i)
+        else:
+            i += 1
+    if not new_tail:
+        add_mfi(tuple(sorted(head)), MFI)
+        return
+    for idx, item in enumerate(list(new_tail)):
+        new_head = head + [item]
+        new_head_bitmap = bitmap_and(head_bitmap, item_bitmaps[item]) if head else item_bitmaps[item]
+        new_tail_after = new_tail[idx+1:]
+        mafia(new_head, new_head_bitmap, new_tail_after, item_bitmaps, min_sup, MFI)
+    if not any(set(head).issubset(set(m)) for m in MFI):
+        add_mfi(tuple(sorted(head)), MFI)
+
+def run_mafia(item_bitmaps, n_trans, min_support_count):
+    items_sorted = sorted(item_bitmaps.keys())
+    full_bitmap = (1 << n_trans) - 1 if n_trans > 0 else 0
+    MFI = []
+    mafia([], full_bitmap, items_sorted, item_bitmaps, min_support_count, MFI)
+    MFI_sorted = sorted([tuple(x) for x in MFI], key=lambda t: (-len(t), t))
+    return MFI_sorted
+
+for min_sup in [5, 3, 2, 1]:
+    MFI = run_mafia(item_to_bitmap, n_trans, min_sup)
+    print("\nmin_support =", min_sup)
+    print("Maximal Frequent Itemsets (MFI):")
+    for m in MFI:
+        b = None
+        for it in m:
+            b = item_to_bitmap[it] if b is None else (b & item_to_bitmap[it])
+        print(f"  {list(m)} (support={support_of_bitmap(b)})")
