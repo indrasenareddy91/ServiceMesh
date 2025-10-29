@@ -1,66 +1,142 @@
-# closed_frequent_dfs
+import random
+from math import log2
+from collections import Counter
 
-def load_transactions(filename):
-    """Load transactions from file. Each line: TID item1 item2 ..."""
-    transactions = []
-    with open(filename, 'r') as f:
-        for line in f:
-            parts = line.strip().split()
-            if len(parts) > 1:
-                transactions.append(set(parts[1:]))  # skip TID
-    return transactions
+# ---------- Decision Tree Node ----------
+class TreeNode:
+    def _init_(self, attribute=None, label=None):
+        self.attribute = attribute
+        self.label = label
+        self.children = {}
 
+# ---------- Helper Functions ----------
+def majority_class(data):
+    counts = {}
+    for row in data:
+        label = row[-1]
+        counts[label] = counts.get(label, 0) + 1
+    return max(counts, key=counts.get)
 
-def support_count(itemset, transactions):
-    """Count how many transactions contain the given itemset."""
-    return sum(1 for t in transactions if itemset.issubset(t))
+def entropy(data):
+    counts = {}
+    for row in data:
+        label = row[-1]
+        counts[label] = counts.get(label, 0) + 1
+    total = len(data)
+    ent = 0.0
+    for count in counts.values():
+        p = count / total
+        ent -= p * log2(p)
+    return ent
 
+def info_gain(data, attr_index):
+    total_entropy = entropy(data)
+    partitions = {}
+    for row in data:
+        key = row[attr_index]
+        partitions.setdefault(key, []).append(row)
+    weighted_entropy = sum((len(subset)/len(data)) * entropy(subset) for subset in partitions.values())
+    return total_entropy - weighted_entropy
 
-def dfs_closed(current_set, items, transactions, min_sup, closed_sets):
-    """Depth-first enumeration of closed frequent itemsets."""
-    extended = False
-    current_sup = support_count(current_set, transactions)
+def choose_best_attribute(data, attributes):
+    best_gain = -1
+    best_attr = None
+    for attr in attributes:
+        gain = info_gain(data, attr)
+        if gain > best_gain:
+            best_gain = gain
+            best_attr = attr
+    return best_attr
 
-    for i, item in enumerate(items):
-        new_set = current_set | {item}
-        sup = support_count(new_set, transactions)
-        if sup >= min_sup:
-            extended = True
-            dfs_closed(new_set, items[i+1:], transactions, min_sup, closed_sets)
+# ---------- Build Decision Tree ----------
+def generate_decision_tree(data, attributes):
+    classes = [row[-1] for row in data]
+    if all(c == classes[0] for c in classes):
+        return TreeNode(label=classes[0])
+    if not attributes:
+        return TreeNode(label=majority_class(data))
 
-    # If no extension found, current_set is a candidate
-    if not extended:
-        # Add if not subset of any existing closed set with same support
-        if not any(current_set < cs and current_sup == support_count(cs, transactions)
-                   for cs in closed_sets):
-            closed_sets.append(current_set)
+    best_attr = choose_best_attribute(data, attributes)
+    root = TreeNode(attribute=best_attr)
+    values = set(row[best_attr] for row in data)
+    new_attributes = [a for a in attributes if a != best_attr]
 
+    for value in values:
+        subset = [row for row in data if row[best_attr] == value]
+        if not subset:
+            root.children[value] = TreeNode(label=majority_class(data))
+        else:
+            root.children[value] = generate_decision_tree(subset, new_attributes)
+    return root
 
-def find_closed_frequent_itemsets(transactions, min_sup):
-    """Main driver to find closed frequent itemsets."""
-    items = sorted({item for t in transactions for item in t})
-    closed_sets = []
-    dfs_closed(set(), items, transactions, min_sup, closed_sets)
-    return closed_sets
+# ---------- Predict with a Decision Tree ----------
+def predict_tree(tree, sample):
+    if tree.label is not None:
+        return tree.label
+    value = sample[tree.attribute]
+    if value in tree.children:
+        return predict_tree(tree.children[value], sample)
+    else:
+        # If unseen value -> fallback to majority label
+        return None
 
+# ---------- Random Forest ----------
+class RandomForest:
+    def _init_(self, n_trees=5, sample_ratio=0.8, n_features=None):
+        self.n_trees = n_trees
+        self.sample_ratio = sample_ratio
+        self.n_features = n_features
+        self.trees = []
 
-# ------------------------------------------------------------
-# Example usage
-# ------------------------------------------------------------
+    def bootstrap_sample(self, data):
+        n_samples = int(len(data) * self.sample_ratio)
+        return [random.choice(data) for _ in range(n_samples)]
+
+    def fit(self, data, all_attributes):
+        for _ in range(self.n_trees):
+            sample = self.bootstrap_sample(data)
+            if self.n_features:
+                attributes = random.sample(all_attributes, self.n_features)
+            else:
+                attributes = all_attributes[:]
+            tree = generate_decision_tree(sample, attributes)
+            self.trees.append(tree)
+
+    def predict(self, sample):
+        predictions = []
+        for tree in self.trees:
+            label = predict_tree(tree, sample)
+            if label:
+                predictions.append(label)
+        if predictions:
+            return Counter(predictions).most_common(1)[0][0]
+        else:
+            return None
+
+# ---------- Example Usage ----------
 if _name_ == "_main_":
-    # Example td.txt content:
-    # T1 a b c d
-    # T2 a c
-    # T3 a c d
-    # T4 b
-    # T5 a b c e
-    # T10 d e
+    data = [
+        ['Sunny', 'Hot', 'High', 'Weak', 'No'],
+        ['Sunny', 'Hot', 'High', 'Strong', 'No'],
+        ['Overcast', 'Hot', 'High', 'Weak', 'Yes'],
+        ['Rain', 'Mild', 'High', 'Weak', 'Yes'],
+        ['Rain', 'Cool', 'Normal', 'Weak', 'Yes'],
+        ['Rain', 'Cool', 'Normal', 'Strong', 'No'],
+        ['Overcast', 'Cool', 'Normal', 'Strong', 'Yes'],
+        ['Sunny', 'Mild', 'High', 'Weak', 'No'],
+        ['Sunny', 'Cool', 'Normal', 'Weak', 'Yes'],
+        ['Rain', 'Mild', 'Normal', 'Weak', 'Yes'],
+        ['Sunny', 'Mild', 'Normal', 'Strong', 'Yes'],
+        ['Overcast', 'Mild', 'High', 'Strong', 'Yes'],
+        ['Overcast', 'Hot', 'Normal', 'Weak', 'Yes'],
+        ['Rain', 'Mild', 'High', 'Strong', 'No']
+    ]
 
-    transactions = load_transactions("td.txt")
-    min_sup = 2  # can set as needed
+    attributes = [0, 1, 2, 3]
 
-    closed_sets = find_closed_frequent_itemsets(transactions, min_sup)
+    forest = RandomForest(n_trees=5, sample_ratio=0.8, n_features=2)
+    forest.fit(data, attributes)
 
-    print("\nClosed Frequent Itemsets (min_sup = {})".format(min_sup))
-    for s in closed_sets:
-        print(f"{sorted(s)} -> support = {support_count(s, transactions)}")
+    test_sample = ['Sunny', 'Cool', 'High', 'Strong']
+    prediction = forest.predict(test_sample)
+    print("Prediction for", test_sample, ":", prediction)
