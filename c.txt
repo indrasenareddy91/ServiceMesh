@@ -1,142 +1,72 @@
-import random
-from math import log2
-from collections import Counter
+# ------------------------------
+# Simple Linear SVM from Scratch
+# ------------------------------
 
-# ---------- Decision Tree Node ----------
-class TreeNode:
-    def _init_(self, attribute=None, label=None):
-        self.attribute = attribute
-        self.label = label
-        self.children = {}
+# Step 1: Dataset (2D list)
+# Each entry = [x1, x2, label]
+# label is +1 or -1
+data = [
+    [2, 3, 1],
+    [1, 1, -1],
+    [2, 1, -1],
+    [3, 2, 1],
+    [2, 4, 1],
+    [1, 2, -1]
+]
 
-# ---------- Helper Functions ----------
-def majority_class(data):
-    counts = {}
-    for row in data:
-        label = row[-1]
-        counts[label] = counts.get(label, 0) + 1
-    return max(counts, key=counts.get)
+# Step 2: Separate features and labels
+X = []
+y = []
+for row in data:
+    X.append([row[0], row[1]])
+    y.append(row[2])
 
-def entropy(data):
-    counts = {}
-    for row in data:
-        label = row[-1]
-        counts[label] = counts.get(label, 0) + 1
-    total = len(data)
-    ent = 0.0
-    for count in counts.values():
-        p = count / total
-        ent -= p * log2(p)
-    return ent
+# Step 3: Initialize parameters
+w = [0.0, 0.0]   # weights
+b = 0.0           # bias
+lr = 0.001        # learning rate
+C = 1.0           # regularization constant
+epochs = 10000    # number of iterations
 
-def info_gain(data, attr_index):
-    total_entropy = entropy(data)
-    partitions = {}
-    for row in data:
-        key = row[attr_index]
-        partitions.setdefault(key, []).append(row)
-    weighted_entropy = sum((len(subset)/len(data)) * entropy(subset) for subset in partitions.values())
-    return total_entropy - weighted_entropy
-
-def choose_best_attribute(data, attributes):
-    best_gain = -1
-    best_attr = None
-    for attr in attributes:
-        gain = info_gain(data, attr)
-        if gain > best_gain:
-            best_gain = gain
-            best_attr = attr
-    return best_attr
-
-# ---------- Build Decision Tree ----------
-def generate_decision_tree(data, attributes):
-    classes = [row[-1] for row in data]
-    if all(c == classes[0] for c in classes):
-        return TreeNode(label=classes[0])
-    if not attributes:
-        return TreeNode(label=majority_class(data))
-
-    best_attr = choose_best_attribute(data, attributes)
-    root = TreeNode(attribute=best_attr)
-    values = set(row[best_attr] for row in data)
-    new_attributes = [a for a in attributes if a != best_attr]
-
-    for value in values:
-        subset = [row for row in data if row[best_attr] == value]
-        if not subset:
-            root.children[value] = TreeNode(label=majority_class(data))
+# Step 4: Training using Gradient Descent
+for epoch in range(epochs):
+    for i in range(len(X)):
+        x1, x2 = X[i][0], X[i][1]
+        yi = y[i]
+        
+        # Margin check
+        condition = yi * (w[0]*x1 + w[1]*x2 + b)
+        
+        if condition >= 1:
+            # No misclassification, update only regularization term
+            w[0] -= lr * (2 * w[0])
+            w[1] -= lr * (2 * w[1])
         else:
-            root.children[value] = generate_decision_tree(subset, new_attributes)
-    return root
+            # Misclassified → apply hinge loss gradient
+            w[0] -= lr * (2 * w[0] - C * yi * x1)
+            w[1] -= lr * (2 * w[1] - C * yi * x2)
+            b -= lr * (-C * yi)
 
-# ---------- Predict with a Decision Tree ----------
-def predict_tree(tree, sample):
-    if tree.label is not None:
-        return tree.label
-    value = sample[tree.attribute]
-    if value in tree.children:
-        return predict_tree(tree.children[value], sample)
-    else:
-        # If unseen value -> fallback to majority label
-        return None
+# Step 5: Prediction function
+def predict(x):
+    value = w[0]*x[0] + w[1]*x[1] + b
+    return 1 if value >= 0 else -1
 
-# ---------- Random Forest ----------
-class RandomForest:
-    def _init_(self, n_trees=5, sample_ratio=0.8, n_features=None):
-        self.n_trees = n_trees
-        self.sample_ratio = sample_ratio
-        self.n_features = n_features
-        self.trees = []
+# Step 6: Test on training data
+correct = 0
+for i in range(len(X)):
+    pred = predict(X[i])
+    if pred == y[i]:
+        correct += 1
+    print("Input:", X[i], "Actual:", y[i], "Predicted:", pred)
 
-    def bootstrap_sample(self, data):
-        n_samples = int(len(data) * self.sample_ratio)
-        return [random.choice(data) for _ in range(n_samples)]
+accuracy = correct / len(X)
+print("\nFinal weights:", w)
+print("Final bias:", b)
+print("Training accuracy:", accuracy)
 
-    def fit(self, data, all_attributes):
-        for _ in range(self.n_trees):
-            sample = self.bootstrap_sample(data)
-            if self.n_features:
-                attributes = random.sample(all_attributes, self.n_features)
-            else:
-                attributes = all_attributes[:]
-            tree = generate_decision_tree(sample, attributes)
-            self.trees.append(tree)
-
-    def predict(self, sample):
-        predictions = []
-        for tree in self.trees:
-            label = predict_tree(tree, sample)
-            if label:
-                predictions.append(label)
-        if predictions:
-            return Counter(predictions).most_common(1)[0][0]
-        else:
-            return None
-
-# ---------- Example Usage ----------
-if _name_ == "_main_":
-    data = [
-        ['Sunny', 'Hot', 'High', 'Weak', 'No'],
-        ['Sunny', 'Hot', 'High', 'Strong', 'No'],
-        ['Overcast', 'Hot', 'High', 'Weak', 'Yes'],
-        ['Rain', 'Mild', 'High', 'Weak', 'Yes'],
-        ['Rain', 'Cool', 'Normal', 'Weak', 'Yes'],
-        ['Rain', 'Cool', 'Normal', 'Strong', 'No'],
-        ['Overcast', 'Cool', 'Normal', 'Strong', 'Yes'],
-        ['Sunny', 'Mild', 'High', 'Weak', 'No'],
-        ['Sunny', 'Cool', 'Normal', 'Weak', 'Yes'],
-        ['Rain', 'Mild', 'Normal', 'Weak', 'Yes'],
-        ['Sunny', 'Mild', 'Normal', 'Strong', 'Yes'],
-        ['Overcast', 'Mild', 'High', 'Strong', 'Yes'],
-        ['Overcast', 'Hot', 'Normal', 'Weak', 'Yes'],
-        ['Rain', 'Mild', 'High', 'Strong', 'No']
-    ]
-
-    attributes = [0, 1, 2, 3]
-
-    forest = RandomForest(n_trees=5, sample_ratio=0.8, n_features=2)
-    forest.fit(data, attributes)
-
-    test_sample = ['Sunny', 'Cool', 'High', 'Strong']
-    prediction = forest.predict(test_sample)
-    print("Prediction for", test_sample, ":", prediction)
+# Step 7: Test on new unseen samples
+test_points = [[1,3], [3,3], [2,2], [4,1]]
+print("\nTesting on new samples:")
+for t in test_points:
+    print("Point:", t, "Predicted class:", predict(t))
