@@ -11,8 +11,8 @@ const __dirname = path.dirname(__filename);
 
 // Route to serve the file
 
-app.get("/servicemeshp", (req, res) => {
-  res.sendFile(path.join(__dirname, "p.txt"));
+app.get("/servicemesha", (req, res) => {
+  res.sendFile(path.join(__dirname, "a.txt"));
 });
 app.get("/servicemeshc", (req, res) => {
   res.sendFile(path.join(__dirname, "c.txt"));
