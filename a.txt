@@ -1,4 +1,150 @@
-def find_frequent_items(transactions, min_support):
+# Decision Tree Node
+class TreeNode:
+    def __init__(self, attribute=None, label=None):
+        self.attribute = attribute  # attribute index to split on
+        self.label = label          # class label if leaf
+        self.children = {}          # dictionary mapping attribute value -> subtree
+
+
+# Function to find the majority class in a dataset
+def majority_class(data):
+    counts = {}
+    for row in data:
+        label = row[-1]  # last element is the class label
+        counts[label] = counts.get(label, 0) + 1
+    return max(counts, key=counts.get)
+
+
+# Entropy calculation
+def entropy(data):
+    from math import log2
+    counts = {}
+    for row in data:
+        label = row[-1]
+        counts[label] = counts.get(label, 0) + 1
+    total = len(data)
+    ent = 0.0
+    for count in counts.values():
+        p = count / total
+        ent -= p * log2(p)
+    return ent
+
+
+# Information gain
+def info_gain(data, attr_index):
+    total_entropy = entropy(data)
+    partitions = {}
+    for row in data:
+        key = row[attr_index]
+        if key not in partitions:
+            partitions[key] = []
+        partitions[key].append(row)
+    weighted_entropy = 0.0
+    total = len(data)
+    for subset in partitions.values():
+        weighted_entropy += (len(subset) / total) * entropy(subset)
+    return total_entropy - weighted_entropy
+
+
+# Choose best attribute
+def choose_best_attribute(data, attributes):
+    best_gain = -1
+    best_attr = None
+    for attr in attributes:
+        gain = info_gain(data, attr)
+        if gain > best_gain:
+            best_gain = gain
+            best_attr = attr
+    return best_attr
+
+
+# Generate Decision Tree
+def generate_decision_tree(data, attributes):
+    classes = [row[-1] for row in data]
+    # Base cases
+    if all(c == classes[0] for c in classes):
+        return TreeNode(label=classes[0])
+
+    if not attributes:
+        return TreeNode(label=majority_class(data))
+
+    best_attr = choose_best_attribute(data, attributes)
+    root = TreeNode(attribute=best_attr)
+
+    values = set(row[best_attr] for row in data)
+    new_attributes = [a for a in attributes if a != best_attr]
+
+    for value in values:
+        subset = [row for row in data if row[best_attr] == value]
+        if not subset:
+            root.children[value] = TreeNode(label=majority_class(data))
+        else:
+            root.children[value] = generate_decision_tree(subset, new_attributes)
+
+    return root
+
+
+# Function to print tree
+def print_tree(node, depth=0):
+    if node.label is not None:
+        print("  " * depth + f"Leaf: {node.label}")
+    else:
+        print("  " * depth + f"Attribute {node.attribute}")
+        for value, child in node.children.items():
+            print("  " * (depth + 1) + f"Value = {value}")
+            print_tree(child, depth + 2)
+
+
+# ---- NEW: Prediction function ----
+def predict(tree, sample):
+    """Predict class label for a given test sample."""
+    if tree.label is not None:
+        return tree.label
+    attr_value = sample[tree.attribute]
+    if attr_value not in tree.children:
+        # unseen attribute value → return majority of known leaves
+        labels = []
+        def collect_labels(node):
+            if node.label is not None:
+                labels.append(node.label)
+            else:
+                for child in node.children.values():
+                    collect_labels(child)
+        collect_labels(tree)
+        return max(set(labels), key=labels.count)
+    return predict(tree.children[attr_value], sample)
+
+
+# Example usage
+if __name__ == "__main__":
+    data = [
+        ['Sunny', 'Hot', 'High', 'Weak', 'No'],
+        ['Sunny', 'Hot', 'High', 'Strong', 'No'],
+        ['Overcast', 'Hot', 'High', 'Weak', 'Yes'],
+        ['Rain', 'Mild', 'High', 'Weak', 'Yes'],
+        ['Rain', 'Cool', 'Normal', 'Weak', 'Yes'],
+        ['Rain', 'Cool', 'Normal', 'Strong', 'No'],
+        ['Overcast', 'Cool', 'Normal', 'Strong', 'Yes'],
+        ['Sunny', 'Mild', 'High', 'Weak', 'No'],
+        ['Sunny', 'Cool', 'Normal', 'Weak', 'Yes'],
+        ['Rain', 'Mild', 'Normal', 'Weak', 'Yes'],
+        ['Sunny', 'Mild', 'Normal', 'Strong', 'Yes'],
+        ['Overcast', 'Mild', 'High', 'Strong', 'Yes'],
+        ['Overcast', 'Hot', 'Normal', 'Weak', 'Yes'],
+        ['Rain', 'Mild', 'High', 'Strong', 'No']
+    ]
+
+    attributes = [0, 1, 2, 3]
+    tree = generate_decision_tree(data, attributes)
+
+    print("Decision Tree Structure:")
+    print_tree(tree)
+
+    # Test prediction
+    test_sample = ['Sunny', 'Cool', 'High', 'Strong']
+    prediction = predict(tree, test_sample)
+    print("\nTest sample:", test_sample)
+    print("Predicted class:", prediction) find_frequent_items(transactions, min_support):
     item_count = {}
     for trans in transactions:
         for item in trans:
