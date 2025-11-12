@@ -1,0 +1,92 @@
+import math
+import random
+
+# --- Helper functions ---
+def sigmoid(x):
+    return 1 / (1 + math.exp(-x))
+
+def sigmoid_derivative(x):
+    return x * (1 - x)
+
+# --- XOR dataset ---
+X = [[0, 0],
+     [0, 1],
+     [1, 0],
+     [1, 1]]
+
+y = [0, 1, 1, 0]
+
+# --- Initialize weights and biases randomly ---
+random.seed(42)
+W1 = [[random.uniform(-1, 1), random.uniform(-1, 1)],   # 2x2
+      [random.uniform(-1, 1), random.uniform(-1, 1)]]
+b1 = [0, 0]
+
+W2 = [random.uniform(-1, 1), random.uniform(-1, 1)]     # 2x1
+b2 = 0
+
+lr = 0.1  # learning rate
+
+# --- Training loop ---
+for epoch in range(10000):
+    total_loss = 0
+    for i in range(len(X)):
+        # ---- Forward pass ----
+        x1, x2 = X[i]
+        target = y[i]
+
+        # Hidden layer
+        z1 = x1 * W1[0][0] + x2 * W1[1][0] + b1[0]
+        z2 = x1 * W1[0][1] + x2 * W1[1][1] + b1[1]
+        a1 = sigmoid(z1)
+        a2 = sigmoid(z2)
+
+        # Output layer
+        z3 = a1 * W2[0] + a2 * W2[1] + b2
+        output = sigmoid(z3)
+
+        # ---- Compute loss ----
+        loss = (target - output) ** 2
+        total_loss += loss
+
+        # ---- Backpropagation ----
+        d_output = 2 * (output - target) * sigmoid_derivative(output)
+
+        d_W2 = [d_output * a1, d_output * a2]
+        d_b2 = d_output
+
+        d_a1 = d_output * W2[0] * sigmoid_derivative(a1)
+        d_a2 = d_output * W2[1] * sigmoid_derivative(a2)
+
+        d_W1 = [
+            [d_a1 * x1, d_a2 * x1],
+            [d_a1 * x2, d_a2 * x2]
+        ]
+        d_b1 = [d_a1, d_a2]
+
+        # ---- Update weights ----
+        W2[0] -= lr * d_W2[0]
+        W2[1] -= lr * d_W2[1]
+        b2 -= lr * d_b2
+
+        W1[0][0] -= lr * d_W1[0][0]
+        W1[0][1] -= lr * d_W1[0][1]
+        W1[1][0] -= lr * d_W1[1][0]
+        W1[1][1] -= lr * d_W1[1][1]
+        b1[0] -= lr * d_b1[0]
+        b1[1] -= lr * d_b1[1]
+
+    if epoch % 1000 == 0:
+        print(f"Epoch {epoch}, Loss: {total_loss / 4:.4f}")
+
+# --- Testing the network ---
+print("\nFinal Predictions:")
+for i in range(len(X)):
+    x1, x2 = X[i]
+    z1 = x1 * W1[0][0] + x2 * W1[1][0] + b1[0]
+    z2 = x1 * W1[0][1] + x2 * W1[1][1] + b1[1]
+    a1 = sigmoid(z1)
+    a2 = sigmoid(z2)
+    z3 = a1 * W2[0] + a2 * W2[1] + b2
+    output = sigmoid(z3)
+    print(f"{X[i]} -> {round(output)} ({output:.4f})")
