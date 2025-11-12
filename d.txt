@@ -1,0 +1,55 @@
+# -------------------------
+# DBSCAN (no imports, fixed)
+# -------------------------
+
+def euclidean(p1, p2):
+    return sum((p1[i] - p2[i]) ** 2 for i in range(len(p1))) ** 0.5
+
+def region_query(data, point, eps):
+    neighbors = []
+    for p in data:
+        if euclidean(p, point) <= eps:
+            neighbors.append(p)
+    return neighbors
+
+def expand_cluster(data, point, neighbors, cluster, eps, min_pts, visited, cluster_list):
+    cluster.append(point)
+    i = 0
+    while i < len(neighbors):
+        p = neighbors[i]
+        pt = tuple(p)
+        if pt not in visited:
+            visited.add(pt)
+            new_neighbors = region_query(data, p, eps)
+            if len(new_neighbors) >= min_pts:
+                for n in new_neighbors:
+                    if n not in neighbors:
+                        neighbors.append(n)
+        # check if p is not already in any cluster
+        if not any(p in c for c in cluster_list):
+            cluster.append(p)
+        i += 1
+
+def dbscan(data, eps=2, min_pts=2):
+    visited = set()
+    cluster_list = []
+
+    for point in data:
+        pt = tuple(point)
+        if pt in visited:
+            continue
+        visited.add(pt)
+        neighbors = region_query(data, point, eps)
+        if len(neighbors) < min_pts:
+            continue  # noise
+        cluster = []
+        expand_cluster(data, point, neighbors, cluster, eps, min_pts, visited, cluster_list)
+        cluster_list.append(cluster)
+
+    return cluster_list
+
+
+# Example
+data = [[1, 2], [2, 2], [2, 3], [8, 8], [8, 9], [25, 80]]
+clusters = dbscan(data, eps=2, min_pts=2)
+print("DBSCAN Clusters:", clusters)
