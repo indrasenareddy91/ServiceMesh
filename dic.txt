@@ -1,0 +1,102 @@
+f=open("td.txt","r+")
+
+s=f.read()
+f.close()
+ts=s.split("\n")
+
+for i in range(len(ts)):
+    ts[i]=ts[i].split()
+    ts[i]=sorted(set(ts[i][1:]))
+print(ts)
+
+
+def super_sets(Fk,k):
+    next=[]
+    n=len(Fk)
+    for i in range(n-1):
+        for j in range(n):
+            L1=sorted(set(Fk[i]))
+            L2=sorted(set(Fk[j]))
+            if L1[:k-1]==L2[:k-1]:
+                a=set(L1)|set(L2)
+                a=sorted(a)
+                if len(a)!=k+1:
+                    continue
+                v=True
+                for m in range(len(a)):
+                    s=a[:m]+a[m+1:]
+                    if s not in Fk:
+                        v=False
+                        break
+                if v and a not in next:
+                    next.append(a)
+    return next
+
+
+
+def DIC(ts,min_sup,M):
+    
+    DC,DS,SC,SS=[],[],[],[]
+    counters={}
+
+    items=sorted(set().union(*ts))
+
+    items=[[x] for x in items]
+
+    for c in items:
+        counters[tuple(c)]={"count":0,"seen":0}
+        DC.append(c)
+    
+    k=1
+    while DC or DS:
+        
+        N=len(ts)
+        for i in range(0,N,M):
+            batch=ts[i:i+M]
+            for c in DC+DS:
+                for j in batch:
+                    counters[tuple(c)]["seen"]+=1
+                    if set(c).issubset(j):
+                        counters[tuple(c)]["count"]+=1
+        
+        Moved=[]
+        for c in list(DC):
+            if counters[tuple(c)]["count"]>=min_sup:
+                DC.remove(c)
+                DS.append(c)
+                Moved.append(c)
+        
+        if Moved:
+            Ck=super_sets(DS[:],k)
+            for c in Ck:
+                if tuple(c) not in counters and c not in DC and c not in DS:
+                    DC.append(c)
+                    counters[tuple(c)]={"count":0,"seen":0}
+            k+=1
+        
+        for c in list(DS):
+            if counters[tuple(c)]["seen"]>=N:
+                DS.remove(c)
+                SS.append(c)
+        
+        for c in list(DC):
+            if counters[tuple(c)]["seen"]>=N:
+                DC.remove(c)
+                SC.append(c)
+        
+
+    result = {}
+    for c in SS:
+        key = tuple(c)
+        if counters[key]["count"] >= min_sup:
+            result[key] = counters[key]["count"]
+
+    return result    
+
+
+
+
+res=DIC(ts,2,2)
+
+for i,j in res.items():
+    print(i)
