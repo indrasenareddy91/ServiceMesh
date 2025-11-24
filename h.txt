@@ -1,0 +1,37 @@
+# --------------------------------
+# Hierarchical Clustering (no imports)
+# --------------------------------
+
+def euclidean(p1, p2):
+    return sum((p1[i] - p2[i]) ** 2 for i in range(len(p1))) ** 0.5
+
+def cluster_distance(c1, c2):
+    # single linkage: min distance between any 2 points
+    return min(euclidean(p1, p2) for p1 in c1 for p2 in c2)
+
+def hierarchical_clustering(data, k=2):
+    clusters = [[p] for p in data]  # each point starts as its own cluster
+
+    while len(clusters) > k:
+        # Find two closest clusters
+        min_dist = float('inf')
+        c1_index, c2_index = -1, -1
+
+        for i in range(len(clusters)):
+            for j in range(i + 1, len(clusters)):
+                dist = cluster_distance(clusters[i], clusters[j])
+                if dist < min_dist:
+                    min_dist, c1_index, c2_index = dist, i, j
+
+        # Merge closest clusters
+        merged = clusters[c1_index] + clusters[c2_index]
+        clusters = [clusters[i] for i in range(len(clusters)) if i not in (c1_index, c2_index)]
+        clusters.append(merged)
+
+    return clusters
+
+
+# Example
+data = [[1, 1], [2, 1], [5, 5], [6, 6], [10, 10]]
+clusters = hierarchical_clustering(data, k=2)
+print("Hierarchical Clusters:", clusters)
