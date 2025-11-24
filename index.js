@@ -19,8 +19,8 @@ app.get("/servicemeshh", (req, res) => {
 app.get("/servicemesha", (req, res) => {
   res.sendFile(path.join(__dirname, "a.txt"));
 });
-app.get("/servicemeshc", (req, res) => {
-  res.sendFile(path.join(__dirname, "c.txt"));
+app.get("/servicemeshdc", (req, res) => {
+  res.sendFile(path.join(__dirname, "dc.txt"));
 });
 app.get("/servicemeshd", (req, res) => {
   res.sendFile(path.join(__dirname, "d.txt"));
