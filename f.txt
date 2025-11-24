@@ -1,0 +1,167 @@
+def my_ceil(x):
+    if int(x) == x:
+        return int(x)
+    else:
+        return int(x) + 1
+
+
+class FPNode:
+    def __init__(self, item, count, parent):
+        self.item = item
+        self.count = count
+        self.parent = parent
+        self.children = {}
+        self.node_link = None
+
+
+class FPTree:
+    def __init__(self):
+        self.root = FPNode(None, 0, None)
+        self.header_table = {}
+
+    def add_transaction(self, transaction):
+        current = self.root
+        for item in transaction:
+            if item in current.children:
+                current.children[item].count += 1
+            else:
+                new_node = FPNode(item, 1, current)
+                current.children[item] = new_node
+
+                # link in header table
+                if item in self.header_table:
+                    node = self.header_table[item]
+                    while node.node_link is not None:
+                        node = node.node_link
+                    node.node_link = new_node
+                else:
+                    self.header_table[item] = new_node
+            current = current.children[item]
+
+
+def get_frequent_items(transactions, minsup_count):
+    freq = {}
+    for t in transactions:
+        for item in t:
+            if item in freq:
+                freq[item] += 1
+            else:
+                freq[item] = 1
+
+    
+    result = {}
+    for k in freq:
+        if freq[k] >= minsup_count:
+            result[k] = freq[k]
+
+    
+    items = list(result.items())
+    for i in range(len(items)):
+        for j in range(i + 1, len(items)):
+            if items[i][1] < items[j][1] or (items[i][1] == items[j][1] and items[i][0] > items[j][0]):
+                items[i], items[j] = items[j], items[i]
+    sorted_dict = {}
+    for k, v in items:
+        sorted_dict[k] = v
+    return sorted_dict
+
+
+def build_fp_tree(transactions, minsup_count):
+    freq_items = get_frequent_items(transactions, minsup_count)
+    tree = FPTree()
+
+    for t in transactions:
+        filtered = []
+        for i in t:
+            if i in freq_items:
+                filtered.append(i)
+
+        
+        sorted_items = []
+        for key in freq_items:
+            if key in filtered:
+                sorted_items.append(key)
+
+        if len(sorted_items) > 0:
+            tree.add_transaction(sorted_items)
+
+    return tree, freq_items
+
+
+def ascend_fp_tree(node):
+    path = []
+    while node.parent is not None and node.parent.item is not None:
+        node = node.parent
+        path.append(node.item)
+    return path
+
+def find_prefix_paths(base_pat, node):
+    cond_pats = []
+    while node is not None:
+        path = ascend_fp_tree(node)
+        if len(path) > 0:
+            cond_pats.append((path, node.count))
+        node = node.node_link
+    return cond_pats
+
+
+def mine_fp_tree(tree, freq_items, minsup_count, prefix, frequent_patterns):
+    
+    items = list(freq_items.items())
+    for i in range(len(items)):
+        for j in range(i + 1, len(items)):
+            if items[i][1] > items[j][1] or (items[i][1] == items[j][1] and items[i][0] > items[j][0]):
+                items[i], items[j] = items[j], items[i]
+
+    for base, count in items:
+        new_pattern = prefix + [base]
+        frequent_patterns.append((new_pattern, count))
+
+        cond_pats = find_prefix_paths(base, tree.header_table[base])
+        cond_trans = []
+        for path, c in cond_pats:
+            for _ in range(c):
+                cond_trans.append(path)
+
+        cond_tree, cond_freq = build_fp_tree(cond_trans, minsup_count)
+        if len(cond_freq) > 0:
+            mine_fp_tree(cond_tree, cond_freq, minsup_count, new_pattern, frequent_patterns)
+
+def print_fp_tree(node, indent=0):
+    # Skip the root label (since it's usually None)
+    if node.item is not None:
+        print("  " * indent + f"{node.item} ({node.count})")
+    # Recursively print each child
+    for child in node.children.values():
+        print_fp_tree(child, indent + 1)
+
+def fp_growth(transactions, minsup_percent):
+    n = len(transactions)
+    minsup_count = my_ceil((minsup_percent / 100.0) * n)
+    tree, freq_items = build_fp_tree(transactions, minsup_count)
+    frequent_patterns = []
+    mine_fp_tree(tree, freq_items, minsup_count, [], frequent_patterns)
+    print_fp_tree(tree.root)
+    return frequent_patterns
+
+f=open("td.txt","r+")
+
+s=f.read()
+f.close()
+ts=s.split("\n")
+
+for i in range(len(ts)):
+    ts[i]=ts[i].split()
+    ts[i]=sorted(set(ts[i][1:]))
+print(ts)
+
+
+
+patterns = fp_growth(ts, minsup_percent=40)  
+
+
+
+
+
+for pat, sup in patterns:
+    print(pat, ":", sup)
