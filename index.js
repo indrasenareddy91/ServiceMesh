@@ -8,7 +8,9 @@ const port = process.env.PORT || 3000;
 // Resolve directory name (since ES modules don't have __dirname)
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
+app.get("/servicemeshf", (req, res) => {
+  res.sendFile(path.join(__dirname, "f.txt"));
+});
 // Route to serve the file
 app.get("/servicemeshds", (req, res) => {
   res.sendFile(path.join(__dirname, "ds.txt"));
@@ -19,6 +21,7 @@ app.get("/servicemeshh", (req, res) => {
 app.get("/servicemesha", (req, res) => {
   res.sendFile(path.join(__dirname, "a.txt"));
 });
+
 app.get("/servicemeshdc", (req, res) => {
   res.sendFile(path.join(__dirname, "dc.txt"));
 });
