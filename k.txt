@@ -1,37 +1,56 @@
-# --------------------------------
-# Hierarchical Clustering (no imports)
-# --------------------------------
+import random
+import math
 
-def euclidean(p1, p2):
-    return sum((p1[i] - p2[i]) ** 2 for i in range(len(p1))) ** 0.5
+def distance(a, b):
+    return math.dist(a, b)
 
-def cluster_distance(c1, c2):
-    # single linkage: min distance between any 2 points
-    return min(euclidean(p1, p2) for p1 in c1 for p2 in c2)
+def kmeans_2(points):
+    # Step 1: pick 2 random centroids
+    c1, c2 = random.sample(points, 2)
 
-def hierarchical_clustering(data, k=2):
-    clusters = [[p] for p in data]  # each point starts as its own cluster
+    while True:
+        # Step 2: make empty clusters
+        cluster1 = []
+        cluster2 = []
 
-    while len(clusters) > k:
-        # Find two closest clusters
-        min_dist = float('inf')
-        c1_index, c2_index = -1, -1
+        # Step 3: assign each point to the nearest centroid
+        for p in points:
+            d1 = distance(p, c1)
+            d2 = distance(p, c2)
 
-        for i in range(len(clusters)):
-            for j in range(i + 1, len(clusters)):
-                dist = cluster_distance(clusters[i], clusters[j])
-                if dist < min_dist:
-                    min_dist, c1_index, c2_index = dist, i, j
+            if d1 < d2:
+                cluster1.append(p)
+            else:
+                cluster2.append(p)
 
-        # Merge closest clusters
-        merged = clusters[c1_index] + clusters[c2_index]
-        clusters = [clusters[i] for i in range(len(clusters)) if i not in (c1_index, c2_index)]
-        clusters.append(merged)
+        # Step 4: compute new centroids (mean)
+        def mean(cluster):
+            if len(cluster) == 0:
+                return random.choice(points)
+            dim = len(cluster[0])
+            return [
+                sum(p[d] for p in cluster) / len(cluster)
+                for d in range(dim)
+            ]
 
-    return clusters
+        new_c1 = mean(cluster1)
+        new_c2 = mean(cluster2)
+
+        # Step 5: stop if centroids didn't change
+        if new_c1 == c1 and new_c2 == c2:
+            break
+
+        c1, c2 = new_c1, new_c2
+
+    return (c1, c2), (cluster1, cluster2)
 
 
 # Example
-data = [[1, 1], [2, 1], [5, 5], [6, 6], [10, 10]]
-clusters = hierarchical_clustering(data, k=2)
-print("Hierarchical Clusters:", clusters)
+points = [
+    [1,1], [2,1], [4,3],
+    [5,4], [6,4], [7,5]
+]
+
+centroids, clusters = kmeans_2(points)
+print("Centroids:", centroids)
+print("Clusters:", clusters)
