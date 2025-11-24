@@ -1,9 +1,7 @@
-# -------------------------
-# DBSCAN (no imports, fixed)
-# -------------------------
+import math
 
 def euclidean(p1, p2):
-    return sum((p1[i] - p2[i]) ** 2 for i in range(len(p1))) ** 0.5
+    return math.dist(p1, p2)
 
 def region_query(data, point, eps):
     neighbors = []
@@ -18,16 +16,21 @@ def expand_cluster(data, point, neighbors, cluster, eps, min_pts, visited, clust
     while i < len(neighbors):
         p = neighbors[i]
         pt = tuple(p)
+
         if pt not in visited:
             visited.add(pt)
             new_neighbors = region_query(data, p, eps)
+
+            # If p is a core point
             if len(new_neighbors) >= min_pts:
                 for n in new_neighbors:
                     if n not in neighbors:
                         neighbors.append(n)
-        # check if p is not already in any cluster
+
+        # Add p if not already in any cluster
         if not any(p in c for c in cluster_list):
             cluster.append(p)
+
         i += 1
 
 def dbscan(data, eps=2, min_pts=2):
@@ -36,12 +39,19 @@ def dbscan(data, eps=2, min_pts=2):
 
     for point in data:
         pt = tuple(point)
+
+        # already visited
         if pt in visited:
             continue
+
         visited.add(pt)
         neighbors = region_query(data, point, eps)
+
+        # not a core point → noise
         if len(neighbors) < min_pts:
-            continue  # noise
+            continue
+
+        # expand this cluster
         cluster = []
         expand_cluster(data, point, neighbors, cluster, eps, min_pts, visited, cluster_list)
         cluster_list.append(cluster)
