@@ -1,170 +1,82 @@
-import random
-import math
+def get_support(itemset, transactions):
+    count = 0
+    for t in transactions:
+        if all(i in t for i in itemset):
+            count += 1
+    return count / len(transactions)
 
-# -----------------------------
-# Decision Tree Components
-# -----------------------------
+def combinations(lst, r):
+    if r == 0:
+        return [[]]
+    result = []
+    for i in range(len(lst)):
+        for tail in combinations(lst[i+1:], r-1):
+            result.append([lst[i]] + tail)
+    return result
 
-class TreeNode:
-    def __init__(self, attribute=None, label=None):
-        self.attribute = attribute
-        self.label = label
-        self.children = {}
+def generate_candidates(Lk, k):
+    candidates = []
+    n = len(Lk)
+    for i in range(n):
+        for j in range(i+1, n):
+            if Lk[i][:k-1] == Lk[j][:k-1]:
+                union = sorted(list(set(Lk[i]) | set(Lk[j])))
+                if union not in candidates and len(union) == k+1:
+                    valid = True
+                    for m in range(len(union)):
+                        subset = union[:m] + union[m+1:]
+                        if subset not in Lk:
+                            valid = False
+                            break
+                    if valid:
+                        candidates.append(union)
+    return candidates
 
-def majority_class(data):
-    counts = {}
-    for row in data:
-        label = row[-1]
-        counts[label] = counts.get(label, 0) + 1
-    return max(counts, key=counts.get)
+def apriori(transactions, min_sup):
+    items = sorted({i for t in transactions for i in t if not i.startswith("T")})
+    current_L = [[i] for i in items]
+    
+    all_frequent = {}
+    k = 1
+    while current_L:
+        Lk = []
+        for itemset in current_L:
+            sup = get_support(itemset, transactions)
+            if sup >= min_sup:
+                Lk.append(itemset)
+                all_frequent[tuple(itemset)] = sup
+        current_L = generate_candidates(Lk, k)
+        k += 1
+    return all_frequent
 
-def entropy(data):
-    counts = {}
-    for row in data:
-        label = row[-1]
-        counts[label] = counts.get(label, 0) + 1
-    total = len(data)
-    ent = 0.0
-    for count in counts.values():
-        p = count / total
-        ent -= p * math.log2(p)
-    return ent
+def generate_association_rules(frequent_itemsets, min_conf=0.5):
+    rules = []
+    for itemset, sup in frequent_itemsets.items():
+        if len(itemset) < 2:
+            continue
+        for i in range(1, len(itemset)):
+            for left in combinations(list(itemset), i):
+                right = sorted(list(set(itemset) - set(left)))
+                conf = sup / frequent_itemsets.get(tuple(sorted(left)), 1e-9)
+                if conf >= min_conf:
+                    rules.append((left, right, sup, conf))
+    return rules
 
-def info_gain(data, attr_index):
-    total_entropy = entropy(data)
-    partitions = {}
-    for row in data:
-        key = row[attr_index]
-        if key not in partitions:
-            partitions[key] = []
-        partitions[key].append(row)
-    weighted_entropy = 0.0
-    total = len(data)
-    for subset in partitions.values():
-        weighted_entropy += (len(subset) / total) * entropy(subset)
-    return total_entropy - weighted_entropy
+transactions = [
+    ["T1","a","b","c","e"],
+    ["T2","a","c","e"],
+    ["T3","b","d","f"],
+    ["T4","a","e","f"]
+]
 
-def choose_best_attribute(data, attributes):
-    best_gain = -1
-    best_attr = None
-    for attr in attributes:
-        gain = info_gain(data, attr)
-        if gain > best_gain:
-            best_gain = gain
-            best_attr = attr
-    return best_attr
+min_sup = 0.5  
+frequent_itemsets = apriori(transactions, min_sup)
 
-def generate_decision_tree(data, attributes):
-    classes = [row[-1] for row in data]
-    if all(c == classes[0] for c in classes):
-        return TreeNode(label=classes[0])
+print("Frequent Itemsets:")
+for itemset, sup in frequent_itemsets.items():
+    print(list(itemset), "->", round(sup*100,2), "%")
 
-    if not attributes:
-        return TreeNode(label=majority_class(data))
-
-    best_attr = choose_best_attribute(data, attributes)
-    root = TreeNode(attribute=best_attr)
-
-    values = set(row[best_attr] for row in data)
-    new_attributes = [a for a in attributes if a != best_attr]
-
-    for value in values:
-        subset = [row for row in data if row[best_attr] == value]
-        if not subset:
-            root.children[value] = TreeNode(label=majority_class(data))
-        else:
-            root.children[value] = generate_decision_tree(subset, new_attributes)
-
-    return root
-
-# -----------------------------
-# Random Forest Implementation
-# -----------------------------
-
-def bootstrap_sample(data):
-    """Generate a bootstrap sample (sampling with replacement)."""
-    n = len(data)
-    return [random.choice(data) for _ in range(n)]
-
-def random_subset(attributes, k):
-    """Choose k random attributes (feature bagging)."""
-    return random.sample(attributes, k)
-
-def predict_tree(node, row):
-    """Predict class label for one row using a trained tree."""
-    while node.label is None:
-        value = row[node.attribute]
-        if value in node.children:
-            node = node.children[value]
-        else:
-            # unseen value → majority fallback
-            return None
-    return node.label
-
-def random_forest_train(data, attributes, n_trees=5, m_features=None):
-    """Train Random Forest with n_trees using random feature subsets."""
-    if m_features is None:
-        m_features = int(math.sqrt(len(attributes))) or 1
-
-    forest = []
-    for _ in range(n_trees):
-        sample = bootstrap_sample(data)
-        subset_attrs = random_subset(attributes, m_features)
-        tree = generate_decision_tree(sample, subset_attrs)
-        forest.append(tree)
-    return forest
-
-def random_forest_predict(forest, row):
-    """Predict label using majority vote from all trees."""
-    votes = {}
-    for tree in forest:
-        pred = predict_tree(tree, row)
-        if pred is not None:
-            votes[pred] = votes.get(pred, 0) + 1
-    if not votes:
-        return None
-    return max(votes, key=votes.get)
-
-def print_tree(node, depth=0):
-    if node.label is not None:
-        print("  " * depth + "Leaf:", node.label)
-    else:
-        print("  " * depth + f"Attribute {node.attribute}")
-        for value, child in node.children.items():
-            print("  " * (depth + 1) + f"Value = {value}")
-            print_tree(child, depth + 2)
-
-# -----------------------------
-# Example Usage
-# -----------------------------
-
-if __name__ == "__main__":
-    data = [
-        ['Sunny', 'Hot', 'High', 'Weak', 'No'],
-        ['Sunny', 'Hot', 'High', 'Strong', 'No'],
-        ['Overcast', 'Hot', 'High', 'Weak', 'Yes'],
-        ['Rain', 'Mild', 'High', 'Weak', 'Yes'],
-        ['Rain', 'Cool', 'Normal', 'Weak', 'Yes'],
-        ['Rain', 'Cool', 'Normal', 'Strong', 'No'],
-        ['Overcast', 'Cool', 'Normal', 'Strong', 'Yes'],
-        ['Sunny', 'Mild', 'High', 'Weak', 'No'],
-        ['Sunny', 'Cool', 'Normal', 'Weak', 'Yes'],
-        ['Rain', 'Mild', 'Normal', 'Weak', 'Yes'],
-        ['Sunny', 'Mild', 'Normal', 'Strong', 'Yes'],
-        ['Overcast', 'Mild', 'High', 'Strong', 'Yes'],
-        ['Overcast', 'Hot', 'Normal', 'Weak', 'Yes'],
-        ['Rain', 'Mild', 'High', 'Strong', 'No']
-    ]
-
-    attributes = [0, 1, 2, 3]
-
-    forest = random_forest_train(data, attributes, n_trees=5)
-
-    # Print first tree
-    print("Example Tree Structure:")
-    print_tree(forest[0])
-
-    # Test prediction
-    test_sample = ['Sunny', 'Cool', 'High', 'Strong']
-    pred = random_forest_predict(forest, test_sample)
-    print("\nPredicted class for", test_sample, "=>", pred)
+print("\nAssociation Rules (min_conf = 0.5):")
+rules = generate_association_rules(frequent_itemsets, min_conf=0.5)
+for left, right, sup, conf in rules:
+    print(f"{list(left)} -> {list(right)} | support={round(sup*100,2)}% | confidence={round(conf*100,2)}%")
