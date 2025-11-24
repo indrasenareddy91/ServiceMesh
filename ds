@@ -1,0 +1,170 @@
+import random
+import math
+
+# -----------------------------
+# Decision Tree Components
+# -----------------------------
+
+class TreeNode:
+    def __init__(self, attribute=None, label=None):
+        self.attribute = attribute
+        self.label = label
+        self.children = {}
+
+def majority_class(data):
+    counts = {}
+    for row in data:
+        label = row[-1]
+        counts[label] = counts.get(label, 0) + 1
+    return max(counts, key=counts.get)
+
+def entropy(data):
+    counts = {}
+    for row in data:
+        label = row[-1]
+        counts[label] = counts.get(label, 0) + 1
+    total = len(data)
+    ent = 0.0
+    for count in counts.values():
+        p = count / total
+        ent -= p * math.log2(p)
+    return ent
+
+def info_gain(data, attr_index):
+    total_entropy = entropy(data)
+    partitions = {}
+    for row in data:
+        key = row[attr_index]
+        if key not in partitions:
+            partitions[key] = []
+        partitions[key].append(row)
+    weighted_entropy = 0.0
+    total = len(data)
+    for subset in partitions.values():
+        weighted_entropy += (len(subset) / total) * entropy(subset)
+    return total_entropy - weighted_entropy
+
+def choose_best_attribute(data, attributes):
+    best_gain = -1
+    best_attr = None
+    for attr in attributes:
+        gain = info_gain(data, attr)
+        if gain > best_gain:
+            best_gain = gain
+            best_attr = attr
+    return best_attr
+
+def generate_decision_tree(data, attributes):
+    classes = [row[-1] for row in data]
+    if all(c == classes[0] for c in classes):
+        return TreeNode(label=classes[0])
+
+    if not attributes:
+        return TreeNode(label=majority_class(data))
+
+    best_attr = choose_best_attribute(data, attributes)
+    root = TreeNode(attribute=best_attr)
+
+    values = set(row[best_attr] for row in data)
+    new_attributes = [a for a in attributes if a != best_attr]
+
+    for value in values:
+        subset = [row for row in data if row[best_attr] == value]
+        if not subset:
+            root.children[value] = TreeNode(label=majority_class(data))
+        else:
+            root.children[value] = generate_decision_tree(subset, new_attributes)
+
+    return root
+
+# -----------------------------
+# Random Forest Implementation
+# -----------------------------
+
+def bootstrap_sample(data):
+    """Generate a bootstrap sample (sampling with replacement)."""
+    n = len(data)
+    return [random.choice(data) for _ in range(n)]
+
+def random_subset(attributes, k):
+    """Choose k random attributes (feature bagging)."""
+    return random.sample(attributes, k)
+
+def predict_tree(node, row):
+    """Predict class label for one row using a trained tree."""
+    while node.label is None:
+        value = row[node.attribute]
+        if value in node.children:
+            node = node.children[value]
+        else:
+            # unseen value → majority fallback
+            return None
+    return node.label
+
+def random_forest_train(data, attributes, n_trees=5, m_features=None):
+    """Train Random Forest with n_trees using random feature subsets."""
+    if m_features is None:
+        m_features = int(math.sqrt(len(attributes))) or 1
+
+    forest = []
+    for _ in range(n_trees):
+        sample = bootstrap_sample(data)
+        subset_attrs = random_subset(attributes, m_features)
+        tree = generate_decision_tree(sample, subset_attrs)
+        forest.append(tree)
+    return forest
+
+def random_forest_predict(forest, row):
+    """Predict label using majority vote from all trees."""
+    votes = {}
+    for tree in forest:
+        pred = predict_tree(tree, row)
+        if pred is not None:
+            votes[pred] = votes.get(pred, 0) + 1
+    if not votes:
+        return None
+    return max(votes, key=votes.get)
+
+def print_tree(node, depth=0):
+    if node.label is not None:
+        print("  " * depth + "Leaf:", node.label)
+    else:
+        print("  " * depth + f"Attribute {node.attribute}")
+        for value, child in node.children.items():
+            print("  " * (depth + 1) + f"Value = {value}")
+            print_tree(child, depth + 2)
+
+# -----------------------------
+# Example Usage
+# -----------------------------
+
+if __name__ == "__main__":
+    data = [
+        ['Sunny', 'Hot', 'High', 'Weak', 'No'],
+        ['Sunny', 'Hot', 'High', 'Strong', 'No'],
+        ['Overcast', 'Hot', 'High', 'Weak', 'Yes'],
+        ['Rain', 'Mild', 'High', 'Weak', 'Yes'],
+        ['Rain', 'Cool', 'Normal', 'Weak', 'Yes'],
+        ['Rain', 'Cool', 'Normal', 'Strong', 'No'],
+        ['Overcast', 'Cool', 'Normal', 'Strong', 'Yes'],
+        ['Sunny', 'Mild', 'High', 'Weak', 'No'],
+        ['Sunny', 'Cool', 'Normal', 'Weak', 'Yes'],
+        ['Rain', 'Mild', 'Normal', 'Weak', 'Yes'],
+        ['Sunny', 'Mild', 'Normal', 'Strong', 'Yes'],
+        ['Overcast', 'Mild', 'High', 'Strong', 'Yes'],
+        ['Overcast', 'Hot', 'Normal', 'Weak', 'Yes'],
+        ['Rain', 'Mild', 'High', 'Strong', 'No']
+    ]
+
+    attributes = [0, 1, 2, 3]
+
+    forest = random_forest_train(data, attributes, n_trees=5)
+
+    # Print first tree
+    print("Example Tree Structure:")
+    print_tree(forest[0])
+
+    # Test prediction
+    test_sample = ['Sunny', 'Cool', 'High', 'Strong']
+    pred = random_forest_predict(forest, test_sample)
+    print("\nPredicted class for", test_sample, "=>", pred)
