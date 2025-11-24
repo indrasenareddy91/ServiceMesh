@@ -1,23 +1,24 @@
-# Decision Tree Node
+import random
+import math
+
+# -----------------------------
+# Decision Tree Components
+# -----------------------------
+
 class TreeNode:
     def __init__(self, attribute=None, label=None):
-        self.attribute = attribute  # attribute index to split on
-        self.label = label          # class label if leaf
-        self.children = {}          # dictionary mapping attribute value -> subtree
+        self.attribute = attribute
+        self.label = label
+        self.children = {}
 
-
-# Function to find the majority class in a dataset
 def majority_class(data):
     counts = {}
     for row in data:
-        label = row[-1]  # last element is the class label
+        label = row[-1]
         counts[label] = counts.get(label, 0) + 1
     return max(counts, key=counts.get)
 
-
-# Entropy calculation
 def entropy(data):
-    from math import log2
     counts = {}
     for row in data:
         label = row[-1]
@@ -26,11 +27,9 @@ def entropy(data):
     ent = 0.0
     for count in counts.values():
         p = count / total
-        ent -= p * log2(p)
+        ent -= p * math.log2(p)
     return ent
 
-
-# Information gain
 def info_gain(data, attr_index):
     total_entropy = entropy(data)
     partitions = {}
@@ -45,8 +44,6 @@ def info_gain(data, attr_index):
         weighted_entropy += (len(subset) / total) * entropy(subset)
     return total_entropy - weighted_entropy
 
-
-# Choose best attribute
 def choose_best_attribute(data, attributes):
     best_gain = -1
     best_attr = None
@@ -57,11 +54,8 @@ def choose_best_attribute(data, attributes):
             best_attr = attr
     return best_attr
 
-
-# Generate Decision Tree
 def generate_decision_tree(data, attributes):
     classes = [row[-1] for row in data]
-    # Base cases
     if all(c == classes[0] for c in classes):
         return TreeNode(label=classes[0])
 
@@ -83,39 +77,67 @@ def generate_decision_tree(data, attributes):
 
     return root
 
+# -----------------------------
+# Random Forest Implementation
+# -----------------------------
 
-# Function to print tree
+def bootstrap_sample(data):
+    """Generate a bootstrap sample (sampling with replacement)."""
+    n = len(data)
+    return [random.choice(data) for _ in range(n)]
+
+def random_subset(attributes, k):
+    """Choose k random attributes (feature bagging)."""
+    return random.sample(attributes, k)
+
+def predict_tree(node, row):
+    """Predict class label for one row using a trained tree."""
+    while node.label is None:
+        value = row[node.attribute]
+        if value in node.children:
+            node = node.children[value]
+        else:
+            # unseen value → majority fallback
+            return None
+    return node.label
+
+def random_forest_train(data, attributes, n_trees=5, m_features=None):
+    """Train Random Forest with n_trees using random feature subsets."""
+    if m_features is None:
+        m_features = int(math.sqrt(len(attributes))) or 1
+
+    forest = []
+    for _ in range(n_trees):
+        sample = bootstrap_sample(data)
+        subset_attrs = random_subset(attributes, m_features)
+        tree = generate_decision_tree(sample, subset_attrs)
+        forest.append(tree)
+    return forest
+
+def random_forest_predict(forest, row):
+    """Predict label using majority vote from all trees."""
+    votes = {}
+    for tree in forest:
+        pred = predict_tree(tree, row)
+        if pred is not None:
+            votes[pred] = votes.get(pred, 0) + 1
+    if not votes:
+        return None
+    return max(votes, key=votes.get)
+
 def print_tree(node, depth=0):
     if node.label is not None:
-        print("  " * depth + f"Leaf: {node.label}")
+        print("  " * depth + "Leaf:", node.label)
     else:
         print("  " * depth + f"Attribute {node.attribute}")
         for value, child in node.children.items():
             print("  " * (depth + 1) + f"Value = {value}")
             print_tree(child, depth + 2)
 
+# -----------------------------
+# Example Usage
+# -----------------------------
 
-# ---- NEW: Prediction function ----
-def predict(tree, sample):
-    """Predict class label for a given test sample."""
-    if tree.label is not None:
-        return tree.label
-    attr_value = sample[tree.attribute]
-    if attr_value not in tree.children:
-        # unseen attribute value → return majority of known leaves
-        labels = []
-        def collect_labels(node):
-            if node.label is not None:
-                labels.append(node.label)
-            else:
-                for child in node.children.values():
-                    collect_labels(child)
-        collect_labels(tree)
-        return max(set(labels), key=labels.count)
-    return predict(tree.children[attr_value], sample)
-
-
-# Example usage
 if __name__ == "__main__":
     data = [
         ['Sunny', 'Hot', 'High', 'Weak', 'No'],
@@ -135,124 +157,14 @@ if __name__ == "__main__":
     ]
 
     attributes = [0, 1, 2, 3]
-    tree = generate_decision_tree(data, attributes)
 
-    print("Decision Tree Structure:")
-    print_tree(tree)
+    forest = random_forest_train(data, attributes, n_trees=5)
+
+    # Print first tree
+    print("Example Tree Structure:")
+    print_tree(forest[0])
 
     # Test prediction
     test_sample = ['Sunny', 'Cool', 'High', 'Strong']
-    prediction = predict(tree, test_sample)
-    print("\nTest sample:", test_sample)
-    print("Predicted class:", prediction) find_frequent_items(transactions, min_support):
-    item_count = {}
-    for trans in transactions:
-        for item in trans:
-            item_count[item] = item_count.get(item, 0) + 1
-    frequent_items = {}
-    for item in item_count:
-        if item_count[item] >= min_support:
-            frequent_items[item] = item_count[item]
-    return frequent_items
-
-def build_fp_tree(transactions, frequent_items):
-    root = {'item': 'NULL', 'count': 1, 'children': {}, 'parent': None}
-    for trans in transactions:
-        ordered_items = [item for item in trans if item in frequent_items]
-        ordered_items.sort(key=lambda item: frequent_items[item], reverse=True)
-
-        current_node = root
-        for item in ordered_items:
-            if item not in current_node['children']:
-                current_node['children'][item] = {
-                    'item': item,
-                    'count': 1,
-                    'children': {},
-                    'parent': current_node
-                }
-            else:
-                current_node['children'][item]['count'] += 1
-            current_node = current_node['children'][item]
-    return root
-
-def find_prefix_paths(base_item, tree):
-    paths = [] 
-    nodes_to_visit = []
-
-    def collect_nodes(node):
-        if node['item'] == base_item:
-            nodes_to_visit.append(node)
-        for child in node['children'].values():
-            collect_nodes(child)
-
-    collect_nodes(tree)
-
-    for node in nodes_to_visit:
-        path = []
-        count = node['count']
-        parent = node['parent']
-        while parent is not None and parent['item'] != 'NULL':
-            path.append(parent['item'])
-            parent = parent['parent']
-        if len(path) > 0:
-            paths.append((list(reversed(path)), count))
-    return paths
-
-def build_conditional_tree(paths, min_support):
-
-    cond_transactions = []
-    for path, count in paths:
-        for _ in range(count):  
-            cond_transactions.append(path)
-
-    if not cond_transactions:
-        return None, {}
-
-    frequent_items = find_frequent_items(cond_transactions, min_support)
-    if not frequent_items:
-        return None, {}
-
-    cond_tree = build_fp_tree(cond_transactions, frequent_items)
-    return cond_tree, frequent_items
-
-def mine_tree(tree, frequent_items, min_support, prefix, frequent_itemsets):
-
-    sorted_items = sorted(frequent_items.items(), key=lambda x: x[1])
-    for item, support in sorted_items:
-        new_itemset = prefix + [item]
-        frequent_itemsets.append((new_itemset, support))
-        paths = find_prefix_paths(item, tree)
-        cond_tree, cond_frequent_items = build_conditional_tree(paths, min_support)
-        if cond_tree is not None:
-            mine_tree(cond_tree, cond_frequent_items, min_support, new_itemset, frequent_itemsets)
-
-def print_fp_tree(node, indent=0):
-    print(" " * indent + f"{node['item']}:{node['count']}")
-    for child in node['children'].values():
-        print_fp_tree(child, indent + 6)
-
-transactions = [
-    ['I1','I2','I5'],
-    ['I2','I4'],
-    ['I2','I3'],
-    ['I1','I2','I4'],
-    ['I1','I3','I6'],
-    ['I2','I3'],
-    ['I1','I3'],
-    ['I1','I2','I3','I5'],
-    ['I1','I2','I3']
-]
-
-min_support = 2
-frequent_items = find_frequent_items(transactions, min_support)
-fp_tree_root = build_fp_tree(transactions, frequent_items)
-
-print("\nFP-Tree Structure:\n")
-print_fp_tree(fp_tree_root)
-
-frequent_itemsets = []
-mine_tree(fp_tree_root, frequent_items, min_support, [], frequent_itemsets)
-
-print("\nFrequent Itemsets:")
-for items, support in frequent_itemsets:
-    print(items, "support:", support)
+    pred = random_forest_predict(forest, test_sample)
+    print("\nPredicted class for", test_sample, "=>", pred)
