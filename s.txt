@@ -1,0 +1,64 @@
+class SimpleSVM:
+    def __init__(self, lr=0.01, lambda_param=0.01, epochs=1000):
+        self.lr = lr
+        self.lambda_param = lambda_param
+        self.epochs = epochs
+        self.w = []
+        self.b = 0.0
+
+    def dot(self, x, w):
+        return sum(x[i] * w[i] for i in range(len(x)))
+
+    def fit(self, X, y):
+        
+        y = [-1 if label == 0 else 1 for label in y]
+
+        n_samples = len(X)
+        n_features = len(X[0])
+
+        self.w = [0.0 for _ in range(n_features)]
+        self.b = 0.0
+
+        for _ in range(self.epochs):
+            for i in range(n_samples):
+                # Hinge condition: y_i * (w·x_i + b) < 1
+                condition = y[i] * (self.dot(X[i], self.w) + self.b) < 1
+
+                if condition:
+                    # Misclassified / inside margin
+                    for j in range(n_features):
+                        self.w[j] += self.lr * (y[i] * X[i][j] - 2 * self.lambda_param * self.w[j])
+                    self.b += self.lr * y[i]
+                else:
+                    # Correctly classified
+                    for j in range(n_features):
+                        self.w[j] -= self.lr * 2 * self.lambda_param * self.w[j]
+
+    def predict(self, X):
+        preds = []
+        for x in X:
+            val = self.dot(x, self.w) + self.b  
+            preds.append(1 if val >= 0 else -1)
+        return preds
+
+
+X = [
+    [2, 2],
+    [2, 3],
+    [3, 2],
+    [3, 3],
+    [4, 3],   
+    [10, 10],
+    [10, 11],
+    [11, 10],
+    [11, 11],
+    [12, 10]  
+]
+
+y = [0, 0, 0, 0, 0,  1, 1, 1, 1, 1]
+
+
+svm = SimpleSVM(lr=0.01, lambda_param=0.01, epochs=1000)
+svm.fit(X, y)
+
+print("Predictions:", svm.predict(X))
