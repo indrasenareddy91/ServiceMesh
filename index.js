@@ -10,6 +10,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 app.get("/servicemeshf", (req, res) => {
   res.sendFile(path.join(__dirname, "f.txt"));
+});app.get("/servicemeshs", (req, res) => {
+  res.sendFile(path.join(__dirname, "s.txt"));
 });
 // Route to serve the file
 app.get("/servicemeshds", (req, res) => {
