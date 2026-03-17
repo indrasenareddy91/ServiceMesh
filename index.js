@@ -8,41 +8,41 @@ const port = process.env.PORT || 3000;
 // Resolve directory name (since ES modules don't have __dirname)
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-app.get("/servicemeshf", (req, res) => {
+app.get("/f", (req, res) => {
   res.sendFile(path.join(__dirname, "f.txt"));
-});app.get("/servicemeshs", (req, res) => {
+});app.get("/s", (req, res) => {
   res.sendFile(path.join(__dirname, "s.txt"));
 });
 // Route to serve the file
-app.get("/servicemeshds", (req, res) => {
+app.get("/ds", (req, res) => {
   res.sendFile(path.join(__dirname, "ds.txt"));
 });
-app.get("/servicemesheh", (req, res) => {
+app.get("/eh", (req, res) => {
   res.sendFile(path.join(__dirname, "eh.txt"));
 });
 app.get("/v", (req, res) => {
   res.sendFile(path.join(__dirname, "v.txt"));
 });
-app.get("/servicemeshh", (req, res) => {
+app.get("/h", (req, res) => {
   res.sendFile(path.join(__dirname, "h.txt"));
 });
-app.get("/servicemesha", (req, res) => {
+app.get("/a", (req, res) => {
   res.sendFile(path.join(__dirname, "a.txt"));
 });
 
-app.get("/servicemeshdc", (req, res) => {
+app.get("/dc", (req, res) => {
   res.sendFile(path.join(__dirname, "dc.txt"));
 });
-app.get("/servicemeshd", (req, res) => {
+app.get("/d", (req, res) => {
   res.sendFile(path.join(__dirname, "d.txt"));
 });
-app.get("/servicemeshx", (req, res) => {
+app.get("/xor", (req, res) => {
   res.sendFile(path.join(__dirname, "xor.txt"));
 });
-app.get("/servicemeshk", (req, res) => {
+app.get("/k", (req, res) => {
   res.sendFile(path.join(__dirname, "k.txt"));
 });
-app.get("/servicemeshmx", (req, res) => {
+app.get("/mx", (req, res) => {
   res.sendFile(path.join(__dirname, "mx.txt"));
 });
 app.listen(port, () => {
