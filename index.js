@@ -41,8 +41,8 @@ app.get("/a", (req, res) => {
   res.sendFile(path.join(__dirname, "a.txt"));
 });
 
-app.get("/dc", (req, res) => {
-  res.sendFile(path.join(__dirname, "dc.txt"));
+app.get("/e", (req, res) => {
+  res.sendFile(path.join(__dirname, "e.txt"));
 });
 
 app.get("/d", (req, res) => {
