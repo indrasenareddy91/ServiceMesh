@@ -8,6 +8,8 @@ const port = process.env.PORT || 3000;
 // Resolve directory name (since ES modules don't have __dirname)
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+app.get("/c", (req, res) => {
+  res.sendFile(path.join(__dirname, "c.txt"));
 app.get("/f", (req, res) => {
   res.sendFile(path.join(__dirname, "f.txt"));
 });app.get("/s", (req, res) => {
