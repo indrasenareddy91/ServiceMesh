@@ -244,3 +244,8 @@ compile:
 
 g++ server.cpp -o server -lssl -lcrypto
 g++ client.cpp -o client -lssl -lcrypto
+
+or 
+
+g++ server.cpp -o server -lcrypto
+g++ client.cpp -o client -lcrypto
