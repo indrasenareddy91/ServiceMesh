@@ -233,3 +233,14 @@ int main() {
 
     close(clientSocket);
 }
+
+
+
+insall ssl:
+sudo apt update
+sudo apt install libssl-dev
+
+compile:
+
+g++ server.cpp -o server -lssl -lcrypto
+g++ client.cpp -o client -lssl -lcrypto
