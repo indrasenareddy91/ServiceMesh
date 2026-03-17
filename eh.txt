@@ -1,0 +1,598 @@
+## elgamal.h
+
+```
+
+#ifndef ELGAMAL_H
+#define ELGAMAL_H
+
+#include <string>
+#include <vector>
+#include <cstdint>
+
+struct PublicKey {
+    long long p, g, y;
+};
+
+struct PrivateKey {
+    long long x;
+};
+
+struct ElGamalPacket {
+    long long c1, c2;
+};
+
+long long power(long long base, long long exp, long long mod);
+void generateKeys(PublicKey &pub, PrivateKey &priv);
+std::vector<ElGamalPacket> elgamalEncrypt(const std::string& plaintext, const PublicKey& pub);
+std::string elgamalDecrypt(const std::vector<ElGamalPacket>& ciphertext, const PublicKey& pub, const PrivateKey& priv);
+
+#endif
+```
+
+## elgamal.cpp
+
+```cpp
+#include "elgamal.h"
+#include <random>
+#include <chrono>
+
+long long power(long long base, long long exp, long long mod) {
+    long long res = 1;
+    base %= mod;
+    while (exp > 0) {
+        if (exp & 1) res = (res * base) % mod;
+        base = (base * base) % mod;
+        exp >>= 1;
+    }
+    return res;
+}
+
+void generateKeys(PublicKey &pub, PrivateKey &priv) {
+    pub.p = 2357;   // small prime for demo
+    pub.g = 2;
+
+    unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+    std::mt19937 gen(seed);
+    std::uniform_int_distribution<long long> dist(2, pub.p - 2);
+
+    priv.x = dist(gen);
+    pub.y = power(pub.g, priv.x, pub.p);
+}
+
+std::vector<ElGamalPacket> elgamalEncrypt(const std::string& plaintext, const PublicKey& pub) {
+    std::vector<ElGamalPacket> ciphertext;
+
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<long long> dist(2, pub.p - 2);
+
+    for (unsigned char m : plaintext) {
+        long long k = dist(gen);
+
+        ElGamalPacket packet;
+        packet.c1 = power(pub.g, k, pub.p);
+        long long sharedSecret = power(pub.y, k, pub.p);
+        packet.c2 = (m * sharedSecret) % pub.p;
+
+        ciphertext.push_back(packet);
+    }
+
+    return ciphertext;
+}
+
+std::string elgamalDecrypt(const std::vector<ElGamalPacket>& ciphertext, const PublicKey& pub, const PrivateKey& priv) {
+    std::string plaintext;
+
+    for (const auto& packet : ciphertext) {
+        long long s = power(packet.c1, priv.x, pub.p);
+        long long s_inv = power(s, pub.p - 2, pub.p);   // modular inverse
+        long long m = (packet.c2 * s_inv) % pub.p;
+        plaintext += static_cast<char>(m);
+    }
+
+    return plaintext;
+}
+```
+
+## md5.h
+
+```cpp
+#ifndef MD5_H
+#define MD5_H
+
+#include <string>
+
+std::string md5(const std::string& input);
+
+#endif
+```
+
+## md5.cpp
+
+```cpp
+#include "md5.h"
+#include <vector>
+#include <cmath>
+#include <cstdio>
+#include <cstdint>
+
+typedef uint32_t uint32;
+
+static uint32 leftrotate(uint32 x, uint32 c) {
+    return (x << c) | (x >> (32 - c));
+}
+
+std::string md5(const std::string& input) {
+    std::vector<unsigned char> msg(input.begin(), input.end());
+
+    uint64_t bit_len = static_cast<uint64_t>(msg.size()) * 8;
+
+    msg.push_back(0x80);
+    while (msg.size() % 64 != 56)
+        msg.push_back(0);
+
+    for (int i = 0; i < 8; i++)
+        msg.push_back((bit_len >> (8 * i)) & 0xFF);
+
+    uint32 A = 0x67452301;
+    uint32 B = 0xefcdab89;
+    uint32 C = 0x98badcfe;
+    uint32 D = 0x10325476;
+
+    uint32 s[64] = {
+        7,12,17,22, 7,12,17,22, 7,12,17,22, 7,12,17,22,
+        5,9,14,20, 5,9,14,20, 5,9,14,20, 5,9,14,20,
+        4,11,16,23, 4,11,16,23, 4,11,16,23, 4,11,16,23,
+        6,10,15,21, 6,10,15,21, 6,10,15,21, 6,10,15,21
+    };
+
+    uint32 K[64];
+    for (int i = 0; i < 64; i++)
+        K[i] = static_cast<uint32>(std::floor(std::abs(std::sin(i + 1)) * std::pow(2, 32)));
+
+    for (size_t offset = 0; offset < msg.size(); offset += 64) {
+        uint32 M[16];
+
+        for (int i = 0; i < 16; i++) {
+            M[i] = (uint32)msg[offset + i * 4]
+                 | ((uint32)msg[offset + i * 4 + 1] << 8)
+                 | ((uint32)msg[offset + i * 4 + 2] << 16)
+                 | ((uint32)msg[offset + i * 4 + 3] << 24);
+        }
+
+        uint32 a = A, b = B, c = C, d = D;
+
+        for (int i = 0; i < 64; i++) {
+            uint32 F, g;
+
+            if (i < 16) {
+                F = (b & c) | (~b & d);
+                g = i;
+            } else if (i < 32) {
+                F = (d & b) | (~d & c);
+                g = (5 * i + 1) % 16;
+            } else if (i < 48) {
+                F = b ^ c ^ d;
+                g = (3 * i + 5) % 16;
+            } else {
+                F = c ^ (b | ~d);
+                g = (7 * i) % 16;
+            }
+
+            uint32 temp = d;
+            d = c;
+            c = b;
+            b = b + leftrotate(a + F + K[i] + M[g], s[i]);
+            a = temp;
+        }
+
+        A += a;
+        B += b;
+        C += c;
+        D += d;
+    }
+
+    char result[33];
+    std::sprintf(result, "%08x%08x%08x%08x", A, B, C, D);
+    return std::string(result);
+}
+```
+
+## netutils.h
+
+```cpp
+#ifndef NETUTILS_H
+#define NETUTILS_H
+
+#include <string>
+#include <vector>
+#include <cstdint>
+#include "elgamal.h"
+
+bool sendAll(int sock, const void* data, size_t len);
+bool recvAll(int sock, void* data, size_t len);
+
+bool sendPublicKey(int sock, const PublicKey& key);
+bool recvPublicKey(int sock, PublicKey& key);
+
+bool sendString(int sock, const std::string& s);
+bool recvString(int sock, std::string& s);
+
+bool sendCiphertext(int sock, const std::vector<ElGamalPacket>& packets);
+bool recvCiphertext(int sock, std::vector<ElGamalPacket>& packets);
+
+#endif
+```
+
+## netutils.cpp
+
+```cpp
+#include "netutils.h"
+#include <sys/socket.h>
+#include <unistd.h>
+
+bool sendAll(int sock, const void* data, size_t len) {
+    const char* ptr = static_cast<const char*>(data);
+    while (len > 0) {
+        ssize_t sent = send(sock, ptr, len, 0);
+        if (sent <= 0) return false;
+        ptr += sent;
+        len -= sent;
+    }
+    return true;
+}
+
+bool recvAll(int sock, void* data, size_t len) {
+    char* ptr = static_cast<char*>(data);
+    while (len > 0) {
+        ssize_t recvd = recv(sock, ptr, len, 0);
+        if (recvd <= 0) return false;
+        ptr += recvd;
+        len -= recvd;
+    }
+    return true;
+}
+
+bool sendPublicKey(int sock, const PublicKey& key) {
+    return sendAll(sock, &key, sizeof(PublicKey));
+}
+
+bool recvPublicKey(int sock, PublicKey& key) {
+    return recvAll(sock, &key, sizeof(PublicKey));
+}
+
+bool sendString(int sock, const std::string& s) {
+    uint32_t len = static_cast<uint32_t>(s.size());
+    if (!sendAll(sock, &len, sizeof(len))) return false;
+    if (len > 0 && !sendAll(sock, s.data(), len)) return false;
+    return true;
+}
+
+bool recvString(int sock, std::string& s) {
+    uint32_t len = 0;
+    if (!recvAll(sock, &len, sizeof(len))) return false;
+    s.resize(len);
+    if (len > 0 && !recvAll(sock, &s[0], len)) return false;
+    return true;
+}
+
+bool sendCiphertext(int sock, const std::vector<ElGamalPacket>& packets) {
+    uint32_t count = static_cast<uint32_t>(packets.size());
+    if (!sendAll(sock, &count, sizeof(count))) return false;
+    if (count > 0 && !sendAll(sock, packets.data(), count * sizeof(ElGamalPacket))) return false;
+    return true;
+}
+
+bool recvCiphertext(int sock, std::vector<ElGamalPacket>& packets) {
+    uint32_t count = 0;
+    if (!recvAll(sock, &count, sizeof(count))) return false;
+    packets.resize(count);
+    if (count > 0 && !recvAll(sock, packets.data(), count * sizeof(ElGamalPacket))) return false;
+    return true;
+}
+```
+
+## server.cpp
+
+```cpp
+#include <iostream>
+#include <vector>
+#include <string>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <unistd.h>
+#include <cstring>
+
+#include "elgamal.h"
+#include "md5.h"
+#include "netutils.h"
+
+using namespace std;
+
+bool performHandshake(int clientSocket, PublicKey &serverPub, PrivateKey &serverPriv, PublicKey &clientPub) {
+    generateKeys(serverPub, serverPriv);
+
+    if (!sendPublicKey(clientSocket, serverPub)) return false;
+    if (!recvPublicKey(clientSocket, clientPub)) return false;
+
+    return true;
+}
+
+bool receiveSecureMessage(int sock, const PublicKey& myPub, const PrivateKey& myPriv, string& plaintext) {
+    string receivedHash;
+    vector<ElGamalPacket> incoming;
+
+    if (!recvString(sock, receivedHash)) return false;
+    if (!recvCiphertext(sock, incoming)) return false;
+
+    cout << "\n[Encrypted Received]: " << incoming.size() << " packets" << endl;
+    for (size_t i = 0; i < incoming.size() && i < 2; i++) {
+        cout << " c1: " << incoming[i].c1 << " c2: " << incoming[i].c2 << endl;
+    }
+    if (incoming.size() > 2) cout << " ..." << endl;
+
+    plaintext = elgamalDecrypt(incoming, myPub, myPriv);
+    string computedHash = md5(plaintext);
+
+    cout << "Decrypted Client Message: " << plaintext << endl;
+    cout << "Received MD5 Hash      : " << receivedHash << endl;
+    cout << "Computed MD5 Hash      : " << computedHash << endl;
+
+    if (receivedHash == computedHash)
+        cout << "Hash Verified" << endl;
+    else
+        cout << "Hash Mismatch" << endl;
+
+    return true;
+}
+
+bool sendSecureMessage(int sock, const PublicKey& peerPub, const string& msg) {
+    string hashValue = md5(msg);
+    vector<ElGamalPacket> outgoing = elgamalEncrypt(msg, peerPub);
+
+    cout << "\n[Encrypted Sent]: " << outgoing.size() << " packets" << endl;
+    for (size_t i = 0; i < outgoing.size() && i < 2; i++) {
+        cout << " c1: " << outgoing[i].c1 << " c2: " << outgoing[i].c2 << endl;
+    }
+    if (outgoing.size() > 2) cout << " ..." << endl;
+
+    cout << "MD5 Sent: " << hashValue << endl;
+
+    if (!sendString(sock, hashValue)) return false;
+    if (!sendCiphertext(sock, outgoing)) return false;
+
+    return true;
+}
+
+int main() {
+    int serverSocket = socket(AF_INET, SOCK_STREAM, 0);
+    if (serverSocket < 0) {
+        cerr << "Socket creation failed\n";
+        return 1;
+    }
+
+    int opt = 1;
+    setsockopt(serverSocket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+
+    sockaddr_in serverAddress{};
+    serverAddress.sin_family = AF_INET;
+    serverAddress.sin_port = htons(8080);
+    serverAddress.sin_addr.s_addr = INADDR_ANY;
+
+    if (bind(serverSocket, (sockaddr*)&serverAddress, sizeof(serverAddress)) < 0) {
+        cerr << "Bind failed\n";
+        close(serverSocket);
+        return 1;
+    }
+
+    if (listen(serverSocket, 5) < 0) {
+        cerr << "Listen failed\n";
+        close(serverSocket);
+        return 1;
+    }
+
+    cout << "Server initialized. Waiting for connection..." << endl;
+
+    int clientSocket = accept(serverSocket, nullptr, nullptr);
+    if (clientSocket < 0) {
+        cerr << "Accept failed\n";
+        close(serverSocket);
+        return 1;
+    }
+
+    PublicKey serverPub, clientPub;
+    PrivateKey serverPriv;
+
+    if (!performHandshake(clientSocket, serverPub, serverPriv, clientPub)) {
+        cerr << "Handshake failed\n";
+        close(clientSocket);
+        close(serverSocket);
+        return 1;
+    }
+
+    cout << "Handshake successful. Secure channel open." << endl;
+
+    while (true) {
+        string receivedMessage;
+        if (!receiveSecureMessage(clientSocket, serverPub, serverPriv, receivedMessage)) {
+            cout << "Connection closed by client.\n";
+            break;
+        }
+
+        if (receivedMessage == "exit") {
+            cout << "Client ended the chat.\n";
+            break;
+        }
+
+        string reply;
+        cout << "\nEnter Reply: ";
+        getline(cin, reply);
+
+        if (!sendSecureMessage(clientSocket, clientPub, reply)) {
+            cout << "Failed to send message.\n";
+            break;
+        }
+
+        if (reply == "exit") {
+            cout << "Server ended the chat.\n";
+            break;
+        }
+    }
+
+    close(clientSocket);
+    close(serverSocket);
+    return 0;
+}
+```
+
+## client.cpp
+
+```cpp
+#include <iostream>
+#include <vector>
+#include <string>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+
+#include "elgamal.h"
+#include "md5.h"
+#include "netutils.h"
+
+using namespace std;
+
+bool performHandshake(int serverSocket, PublicKey &clientPub, PrivateKey &clientPriv, PublicKey &serverPub) {
+    if (!recvPublicKey(serverSocket, serverPub)) return false;
+
+    generateKeys(clientPub, clientPriv);
+
+    if (!sendPublicKey(serverSocket, clientPub)) return false;
+
+    return true;
+}
+
+bool sendSecureMessage(int sock, const PublicKey& peerPub, const string& msg) {
+    string hashValue = md5(msg);
+    vector<ElGamalPacket> outgoing = elgamalEncrypt(msg, peerPub);
+
+    cout << "\n[Encrypted Sent]: " << outgoing.size() << " packets" << endl;
+    for (size_t i = 0; i < outgoing.size() && i < 2; i++) {
+        cout << " c1: " << outgoing[i].c1 << " c2: " << outgoing[i].c2 << endl;
+    }
+    if (outgoing.size() > 2) cout << " ..." << endl;
+
+    cout << "MD5 Sent: " << hashValue << endl;
+
+    if (!sendString(sock, hashValue)) return false;
+    if (!sendCiphertext(sock, outgoing)) return false;
+
+    return true;
+}
+
+bool receiveSecureMessage(int sock, const PublicKey& myPub, const PrivateKey& myPriv, string& plaintext) {
+    string receivedHash;
+    vector<ElGamalPacket> incoming;
+
+    if (!recvString(sock, receivedHash)) return false;
+    if (!recvCiphertext(sock, incoming)) return false;
+
+    cout << "\n[Encrypted Received]: " << incoming.size() << " packets" << endl;
+    for (size_t i = 0; i < incoming.size() && i < 2; i++) {
+        cout << " c1: " << incoming[i].c1 << " c2: " << incoming[i].c2 << endl;
+    }
+    if (incoming.size() > 2) cout << " ..." << endl;
+
+    plaintext = elgamalDecrypt(incoming, myPub, myPriv);
+    string computedHash = md5(plaintext);
+
+    cout << "Decrypted Server Message: " << plaintext << endl;
+    cout << "Received MD5 Hash      : " << receivedHash << endl;
+    cout << "Computed MD5 Hash      : " << computedHash << endl;
+
+    if (receivedHash == computedHash)
+        cout << "Hash Verified" << endl;
+    else
+        cout << "Hash Mismatch" << endl;
+
+    return true;
+}
+
+int main() {
+    int clientSocket = socket(AF_INET, SOCK_STREAM, 0);
+    if (clientSocket < 0) {
+        cerr << "Socket creation failed\n";
+        return 1;
+    }
+
+    sockaddr_in serverAddr{};
+    serverAddr.sin_family = AF_INET;
+    serverAddr.sin_port = htons(8080);
+
+    if (inet_pton(AF_INET, "127.0.0.1", &serverAddr.sin_addr) <= 0) {
+        cerr << "Invalid address\n";
+        close(clientSocket);
+        return 1;
+    }
+
+    if (connect(clientSocket, (sockaddr*)&serverAddr, sizeof(serverAddr)) < 0) {
+        cerr << "Connection failed\n";
+        close(clientSocket);
+        return 1;
+    }
+
+    PublicKey clientPub, serverPub;
+    PrivateKey clientPriv;
+
+    if (!performHandshake(clientSocket, clientPub, clientPriv, serverPub)) {
+        cerr << "Handshake failed\n";
+        close(clientSocket);
+        return 1;
+    }
+
+    cout << "Connected to server. Secure channel open." << endl;
+
+    while (true) {
+        string msg;
+        cout << "\nEnter Message: ";
+        getline(cin, msg);
+
+        if (!sendSecureMessage(clientSocket, serverPub, msg)) {
+            cout << "Failed to send message.\n";
+            break;
+        }
+
+        if (msg == "exit") {
+            cout << "Client ended the chat.\n";
+            break;
+        }
+
+        string reply;
+        if (!receiveSecureMessage(clientSocket, clientPub, clientPriv, reply)) {
+            cout << "Connection closed by server.\n";
+            break;
+        }
+
+        if (reply == "exit") {
+            cout << "Server ended the chat.\n";
+            break;
+        }
+    }
+
+    close(clientSocket);
+    return 0;
+}
+```
+
+## Compile Commands
+
+```bash
+g++ server.cpp elgamal.cpp md5.cpp netutils.cpp -o server
+g++ client.cpp elgamal.cpp md5.cpp netutils.cpp -o client
+```
+
+for running:
+
+./server
+./client
+
