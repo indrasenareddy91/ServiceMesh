@@ -1,3 +1,4 @@
+elgamal.h
 #ifndef ELGAMAL_H
 #define ELGAMAL_H
 
@@ -24,3 +25,296 @@ string encryptMessage(const string& plaintext, long long receiverPublicKey, long
 string decryptMessage(const string& ciphertext, long long privateKey, long long p);
 
 #endif
+
+elgamal.cpp
+
+#include "elgamal.h"
+#include <sstream>
+#include <random>
+#include <ctime>
+#include <cstdlib>
+
+using namespace std;
+
+static mt19937_64 rng(time(nullptr));
+
+long long modPow(long long base, long long exp, long long mod) {
+    long long result = 1;
+    base %= mod;
+
+    while (exp > 0) {
+        if (exp & 1) result = (result * base) % mod;
+        base = (base * base) % mod;
+        exp >>= 1;
+    }
+    return result;
+}
+
+long long modInverse(long long a, long long mod) {
+    return modPow(a, mod - 2, mod);
+}
+
+static vector<long long> getPrimeFactors(long long n) {
+    vector<long long> factors;
+
+    while (n % 2 == 0) {
+        factors.push_back(2);
+        while (n % 2 == 0) n /= 2;
+    }
+
+    for (long long i = 3; i * i <= n; i += 2) {
+        if (n % i == 0) {
+            factors.push_back(i);
+            while (n % i == 0) n /= i;
+        }
+    }
+
+    if (n > 1) factors.push_back(n);
+
+    return factors;
+}
+
+long long findPrimitiveRoot(long long p) {
+    long long phi = p - 1;
+    vector<long long> factors = getPrimeFactors(phi);
+
+    for (long long g = 2; g < p; g++) {
+        bool ok = true;
+        for (long long q : factors) {
+            if (modPow(g, phi / q, p) == 1) {
+                ok = false;
+                break;
+            }
+        }
+        if (ok) return g;
+    }
+    return -1;
+}
+
+ElGamalKeyPair generateKeyPair() {
+    ElGamalKeyPair key;
+
+    key.p = 65537;
+    key.g = findPrimitiveRoot(key.p);
+
+    uniform_int_distribution<long long> dist(2, key.p - 2);
+    key.x = dist(rng);
+    key.y = modPow(key.g, key.x, key.p);
+
+    return key;
+}
+
+string encryptMessage(const string& plaintext, long long receiverPublicKey, long long p, long long g) {
+    ostringstream out;
+    uniform_int_distribution<long long> dist(1, p - 2);
+
+    for (int i = 0; i < plaintext.size(); i++) {
+        long long m = (unsigned char)plaintext[i];
+
+        long long k = dist(rng);
+        long long c1 = modPow(g, k, p);
+        long long s  = modPow(receiverPublicKey, k, p);
+        long long c2 = (m * s) % p;
+
+        out << c1 << "," << c2;
+        if (i != plaintext.size() - 1) out << "|";
+    }
+
+    return out.str();
+}
+
+string decryptMessage(const string& ciphertext, long long privateKey, long long p) {
+    string result;
+    string token;
+    stringstream ss(ciphertext);
+
+    while (getline(ss, token, '|')) {
+        int pos = token.find(',');
+        if (pos == string::npos) continue;
+
+        long long c1 = stoll(token.substr(0, pos));
+        long long c2 = stoll(token.substr(pos + 1));
+
+        long long s = modPow(c1, privateKey, p);
+        long long sInv = modInverse(s, p);
+        long long m = (c2 * sInv) % p;
+
+        result += (char)m;
+    }
+
+    return result;
+}
+
+
+server.cpp :
+#include <iostream>
+#include <string>
+#include <unistd.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <sys/select.h>
+#include "elgamal.h"
+
+using namespace std;
+
+bool sendLine(int sock, const string& msg) {
+    string data = msg + "\n";
+    int total = 0;
+
+    while (total < data.size()) {
+        int sent = send(sock, data.c_str() + total, data.size() - total, 0);
+        if (sent <= 0) return false;
+        total += sent;
+    }
+    return true;
+}
+
+bool recvLine(int sock, string& msg) {
+    msg.clear();
+    char ch;
+
+    while (true) {
+        int n = recv(sock, &ch, 1, 0);
+        if (n <= 0) return false;
+        if (ch == '\n') break;
+        msg += ch;
+    }
+    return true;
+}
+
+int main() {
+
+    int serverSocket = socket(AF_INET, SOCK_STREAM, 0);
+
+    sockaddr_in serverAddress{};
+    serverAddress.sin_family = AF_INET;
+    serverAddress.sin_port = htons(8080);
+    serverAddress.sin_addr.s_addr = INADDR_ANY;
+
+    bind(serverSocket, (sockaddr*)&serverAddress, sizeof(serverAddress));
+    listen(serverSocket, 5);
+
+    ElGamalKeyPair serverKeys = generateKeyPair();
+
+    cout << "=== ELGAMAL SERVER STARTED ===\n";
+
+    int clientSocket = accept(serverSocket, NULL, NULL);
+    cout << "Client connected\n";
+
+    string clientPub;
+    recvLine(clientSocket, clientPub);
+    long long clientPublicKey = stoll(clientPub);
+
+    sendLine(clientSocket, to_string(serverKeys.y));
+
+    while (true) {
+
+        string encMsg;
+        if (!recvLine(clientSocket, encMsg)) break;
+
+        cout << "\nEncrypted received : " << encMsg << endl;
+
+        string decrypted = decryptMessage(encMsg, serverKeys.x, serverKeys.p);
+
+        cout << "Decrypted text     : " << decrypted << endl;
+
+        string reply;
+        cout << "Enter reply: ";
+        getline(cin, reply);
+
+        string encReply = encryptMessage(reply, clientPublicKey, serverKeys.p, serverKeys.g);
+
+        sendLine(clientSocket, encReply);
+    }
+
+    close(clientSocket);
+    close(serverSocket);
+}
+
+
+client.cpp :
+#include <iostream>
+#include <string>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <sys/socket.h>
+#include "elgamal.h"
+
+using namespace std;
+
+bool sendLine(int sock, const string& msg) {
+    string data = msg + "\n";
+    int total = 0;
+
+    while (total < data.size()) {
+        int sent = send(sock, data.c_str() + total, data.size() - total, 0);
+        if (sent <= 0) return false;
+        total += sent;
+    }
+    return true;
+}
+
+bool recvLine(int sock, string& msg) {
+    msg.clear();
+    char ch;
+
+    while (true) {
+        int n = recv(sock, &ch, 1, 0);
+        if (n <= 0) return false;
+        if (ch == '\n') break;
+        msg += ch;
+    }
+    return true;
+}
+
+int main() {
+
+    int clientSocket = socket(AF_INET, SOCK_STREAM, 0);
+
+    sockaddr_in serverAddress{};
+    serverAddress.sin_family = AF_INET;
+    serverAddress.sin_port = htons(8080);
+    serverAddress.sin_addr.s_addr = inet_addr("127.0.0.1");
+
+    connect(clientSocket, (sockaddr*)&serverAddress, sizeof(serverAddress));
+
+    ElGamalKeyPair clientKeys = generateKeyPair();
+
+    sendLine(clientSocket, to_string(clientKeys.y));
+
+    string serverPub;
+    recvLine(clientSocket, serverPub);
+    long long serverPublicKey = stoll(serverPub);
+
+    while (true) {
+
+        string message;
+        cout << "\nEnter message: ";
+        getline(cin, message);
+
+        string encrypted = encryptMessage(message, serverPublicKey, clientKeys.p, clientKeys.g);
+
+        cout << "Encrypted payload : " << encrypted << endl;
+
+        sendLine(clientSocket, encrypted);
+
+        string encReply;
+        if (!recvLine(clientSocket, encReply)) break;
+
+        cout << "Encrypted reply   : " << encReply << endl;
+
+        string decrypted = decryptMessage(encReply, clientKeys.x, clientKeys.p);
+
+        cout << "Decrypted reply   : " << decrypted << endl;
+    }
+
+    close(clientSocket);
+}
+
+
+
+
+
+
+
+
