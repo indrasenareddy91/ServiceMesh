@@ -1,37 +1,277 @@
-# --------------------------------
-# Hierarchical Clustering (no imports)
-# --------------------------------
+#include <iostream>
+#include <string>
+#include <sstream>
+#include <vector>
+#include <random>
+#include <ctime>
+#include <cstring>
+#include <cstdio>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <sys/select.h>
+#include <openssl/md5.h>
+using namespace std;
 
-def euclidean(p1, p2):
-    return sum((p1[i] - p2[i]) ** 2 for i in range(len(p1))) ** 0.5
+struct KeyPair {
+    long long p, g, x, y;
+};
 
-def cluster_distance(c1, c2):
-    # single linkage: min distance between any 2 points
-    return min(euclidean(p1, p2) for p1 in c1 for p2 in c2)
+mt19937_64 rng(time(nullptr));
 
-def hierarchical_clustering(data, k=2):
-    clusters = [[p] for p in data]  # each point starts as its own cluster
+long long modPow(long long a, long long b, long long mod) {
+    long long r = 1;
+    a %= mod;
+    while (b) {
+        if (b & 1) r = (r * a) % mod;
+        a = (a * a) % mod;
+        b >>= 1;
+    }
+    return r;
+}
 
-    while len(clusters) > k:
-        # Find two closest clusters
-        min_dist = float('inf')
-        c1_index, c2_index = -1, -1
+long long modInv(long long a, long long mod) {
+    return modPow(a, mod - 2, mod);
+}
 
-        for i in range(len(clusters)):
-            for j in range(i + 1, len(clusters)):
-                dist = cluster_distance(clusters[i], clusters[j])
-                if dist < min_dist:
-                    min_dist, c1_index, c2_index = dist, i, j
+vector<long long> factors(long long n) {
+    vector<long long> f;
+    for (long long i = 2; i * i <= n; i++) {
+        if (n % i == 0) {
+            f.push_back(i);
+            while (n % i == 0) n /= i;
+        }
+    }
+    if (n > 1) f.push_back(n);
+    return f;
+}
 
-        # Merge closest clusters
-        merged = clusters[c1_index] + clusters[c2_index]
-        clusters = [clusters[i] for i in range(len(clusters)) if i not in (c1_index, c2_index)]
-        clusters.append(merged)
+long long primitiveRoot(long long p) {
+    long long phi = p - 1;
+    vector<long long> f = factors(phi);
+    for (long long g = 2; g < p; g++) {
+        bool ok = true;
+        for (long long q : f) {
+            if (modPow(g, phi / q, p) == 1) {
+                ok = false;
+                break;
+            }
+        }
+        if (ok) return g;
+    }
+    return -1;
+}
 
-    return clusters
+KeyPair genKeys() {
+    KeyPair k;
+    k.p = 65537;
+    k.g = primitiveRoot(k.p);
+    uniform_int_distribution<long long> dist(2, k.p - 2);
+    k.x = dist(rng);
+    k.y = modPow(k.g, k.x, k.p);
+    return k;
+}
 
+string md5hex(const string& s) {
+    unsigned char d[MD5_DIGEST_LENGTH];
+    MD5((const unsigned char*)s.c_str(), s.size(), d);
+    char buf[3];
+    string out;
+    for (int i = 0; i < MD5_DIGEST_LENGTH; i++) {
+        sprintf(buf, "%02x", d[i]);
+        out += buf;
+    }
+    return out;
+}
 
-# Example
-data = [[1, 1], [2, 1], [5, 5], [6, 6], [10, 10]]
-clusters = hierarchical_clustering(data, k=2)
-print("Hierarchical Clusters:", clusters)
+string encryptEG(const string& msg, long long pub, long long p, long long g) {
+    uniform_int_distribution<long long> dist(1, p - 2);
+    ostringstream out;
+    for (int i = 0; i < (int)msg.size(); i++) {
+        long long m = (unsigned char)msg[i];
+        long long k = dist(rng);
+        long long c1 = modPow(g, k, p);
+        long long s = modPow(pub, k, p);
+        long long c2 = (m * s) % p;
+        out << c1 << "," << c2;
+        if (i + 1 != (int)msg.size()) out << "|";
+    }
+    return out.str();
+}
+
+string decryptEG(const string& ct, long long priv, long long p) {
+    string res, token;
+    stringstream ss(ct);
+    while (getline(ss, token, '|')) {
+        int pos = token.find(',');
+        if (pos == string::npos) continue;
+        long long c1 = stoll(token.substr(0, pos));
+        long long c2 = stoll(token.substr(pos + 1));
+        long long s = modPow(c1, priv, p);
+        long long m = (c2 * modInv(s, p)) % p;
+        res += (char)m;
+    }
+    return res;
+}
+
+bool sendLine(int sock, const string& s) {
+    string x = s + "\n";
+    int sent = 0;
+    while (sent < (int)x.size()) {
+        int n = send(sock, x.c_str() + sent, x.size() - sent, 0);
+        if (n <= 0) return false;
+        sent += n;
+    }
+    return true;
+}
+
+bool recvLine(int sock, string& s) {
+    s.clear();
+    char ch;
+    while (true) {
+        int n = recv(sock, &ch, 1, 0);
+        if (n <= 0) return false;
+        if (ch == '\n') break;
+        s += ch;
+    }
+    return true;
+}
+
+string makePacket(const string& msg) {
+    return msg + "#" + md5hex(msg);
+}
+
+bool verifyPacket(const string& packet, string& msg) {
+    int pos = packet.rfind('#');
+    if (pos == string::npos) return false;
+    msg = packet.substr(0, pos);
+    string got = packet.substr(pos + 1);
+    return got == md5hex(msg);
+}
+
+int main(int argc, char* argv[]) {
+    if (argc != 2) {
+        cout << "Usage: ./chat server | ./chat client\n";
+        return 0;
+    }
+
+    bool isServer = string(argv[1]) == "server";
+    KeyPair me = genKeys();
+
+    if (isServer) {
+        int s = socket(AF_INET, SOCK_STREAM, 0);
+        sockaddr_in addr{};
+        addr.sin_family = AF_INET;
+        addr.sin_port = htons(8080);
+        addr.sin_addr.s_addr = INADDR_ANY;
+
+        bind(s, (sockaddr*)&addr, sizeof(addr));
+        listen(s, 5);
+
+        cout << "=== SERVER STARTED ===\n";
+        cout << "Public key: " << me.y << "\n";
+
+        fd_set rfds;
+        FD_ZERO(&rfds);
+        FD_SET(s, &rfds);
+        FD_SET(STDIN_FILENO, &rfds);
+        select(max(s, STDIN_FILENO) + 1, &rfds, NULL, NULL, NULL);
+
+        if (FD_ISSET(STDIN_FILENO, &rfds)) {
+            string cmd;
+            getline(cin, cmd);
+            if (cmd == "exit") {
+                close(s);
+                return 0;
+            }
+        }
+
+        int c = accept(s, NULL, NULL);
+        cout << "Client connected\n";
+
+        string peerPubStr;
+        recvLine(c, peerPubStr);
+        long long peerPub = stoll(peerPubStr);
+        sendLine(c, to_string(me.y));
+
+        while (true) {
+            string enc;
+            if (!recvLine(c, enc)) break;
+
+            string packet = decryptEG(enc, me.x, me.p);
+            string msg;
+            bool ok = verifyPacket(packet, msg);
+
+            cout << "\n[CLIENT MESSAGE RECEIVED]\n";
+            cout << "Encrypted        : " << enc << endl;
+            cout << "Decrypted packet : " << packet << endl;
+            cout << "Message          : " << msg << endl;
+            cout << "Integrity        : " << (ok ? "SUCCESS" : "FAILED") << endl;
+
+            string reply;
+            cout << "\nEnter reply: ";
+            getline(cin, reply);
+            if (reply == "exit") break;
+
+            string outPacket = makePacket(reply);
+            string outEnc = encryptEG(outPacket, peerPub, me.p, me.g);
+
+            cout << "\n[SERVER SIDE]\n";
+            cout << "Packet           : " << outPacket << endl;
+            cout << "Encrypted        : " << outEnc << endl;
+
+            if (!sendLine(c, outEnc)) break;
+        }
+
+        close(c);
+        close(s);
+    } else {
+        int c = socket(AF_INET, SOCK_STREAM, 0);
+        sockaddr_in addr{};
+        addr.sin_family = AF_INET;
+        addr.sin_port = htons(8080);
+        addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+
+        connect(c, (sockaddr*)&addr, sizeof(addr));
+
+        cout << "=== CLIENT STARTED ===\n";
+        cout << "Public key: " << me.y << "\n";
+
+        sendLine(c, to_string(me.y));
+        string peerPubStr;
+        recvLine(c, peerPubStr);
+        long long peerPub = stoll(peerPubStr);
+
+        while (true) {
+            string msg;
+            cout << "\nEnter message: ";
+            getline(cin, msg);
+            if (msg == "exit") break;
+
+            string packet = makePacket(msg);
+            string enc = encryptEG(packet, peerPub, me.p, me.g);
+
+            cout << "\n[CLIENT SIDE]\n";
+            cout << "Packet           : " << packet << endl;
+            cout << "Encrypted        : " << enc << endl;
+
+            if (!sendLine(c, enc)) break;
+
+            string encReply;
+            if (!recvLine(c, encReply)) break;
+
+            string packetReply = decryptEG(encReply, me.x, me.p);
+            string reply;
+            bool ok = verifyPacket(packetReply, reply);
+
+            cout << "\n[SERVER REPLY RECEIVED]\n";
+            cout << "Encrypted        : " << encReply << endl;
+            cout << "Decrypted packet : " << packetReply << endl;
+            cout << "Reply            : " << reply << endl;
+            cout << "Integrity        : " << (ok ? "SUCCESS" : "FAILED") << endl;
+        }
+
+        close(c);
+    }
+}
