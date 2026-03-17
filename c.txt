@@ -1,72 +1,131 @@
-# ------------------------------
-# Simple Linear SVM from Scratch
-# ------------------------------
+sha.h
 
-# Step 1: Dataset (2D list)
-# Each entry = [x1, x2, label]
-# label is +1 or -1
-data = [
-    [2, 3, 1],
-    [1, 1, -1],
-    [2, 1, -1],
-    [3, 2, 1],
-    [2, 4, 1],
-    [1, 2, -1]
-]
+#ifndef SHA_H
+#define SHA_H
 
-# Step 2: Separate features and labels
-X = []
-y = []
-for row in data:
-    X.append([row[0], row[1]])
-    y.append(row[2])
+#include <openssl/sha.h>
+#include <string>
+#include <sstream>
+#include <iomanip>
 
-# Step 3: Initialize parameters
-w = [0.0, 0.0]   # weights
-b = 0.0           # bias
-lr = 0.001        # learning rate
-C = 1.0           # regularization constant
-epochs = 10000    # number of iterations
+using namespace std;
 
-# Step 4: Training using Gradient Descent
-for epoch in range(epochs):
-    for i in range(len(X)):
-        x1, x2 = X[i][0], X[i][1]
-        yi = y[i]
-        
-        # Margin check
-        condition = yi * (w[0]*x1 + w[1]*x2 + b)
-        
-        if condition >= 1:
-            # No misclassification, update only regularization term
-            w[0] -= lr * (2 * w[0])
-            w[1] -= lr * (2 * w[1])
-        else:
-            # Misclassified → apply hinge loss gradient
-            w[0] -= lr * (2 * w[0] - C * yi * x1)
-            w[1] -= lr * (2 * w[1] - C * yi * x2)
-            b -= lr * (-C * yi)
+string sha256(string input)
+{
+    unsigned char hash[SHA256_DIGEST_LENGTH];
 
-# Step 5: Prediction function
-def predict(x):
-    value = w[0]*x[0] + w[1]*x[1] + b
-    return 1 if value >= 0 else -1
+    SHA256((unsigned char*)input.c_str(), input.length(), hash);
 
-# Step 6: Test on training data
-correct = 0
-for i in range(len(X)):
-    pred = predict(X[i])
-    if pred == y[i]:
-        correct += 1
-    print("Input:", X[i], "Actual:", y[i], "Predicted:", pred)
+    stringstream ss;
 
-accuracy = correct / len(X)
-print("\nFinal weights:", w)
-print("Final bias:", b)
-print("Training accuracy:", accuracy)
+    for(int i=0;i<SHA256_DIGEST_LENGTH;i++)
+        ss<<hex<<setw(2)<<setfill('0')<<(int)hash[i];
 
-# Step 7: Test on new unseen samples
-test_points = [[1,3], [3,3], [2,2], [4,1]]
-print("\nTesting on new samples:")
-for t in test_points:
-    print("Point:", t, "Predicted class:", predict(t))
+    return ss.str();
+}
+
+#endif
+
+server.cpp (sha)
+
+#include "sha.h"
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <bits/stdc++.h>
+using namespace std;
+
+int main()
+{
+    int serversocket = socket(AF_INET, SOCK_STREAM, 0);
+
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(8080);
+    addr.sin_addr.s_addr = INADDR_ANY;
+
+    bind(serversocket,(sockaddr*)&addr,sizeof(addr));
+    listen(serversocket,0);
+
+    cout<<"Server listening...\n";
+
+    int clientsocket = accept(serversocket,nullptr,nullptr);
+
+    while(true)
+    {
+        int len;
+        recv(clientsocket,&len,sizeof(len),0);
+
+        if(len==0) break;
+
+        char buffer[1024];
+        recv(clientsocket,buffer,len,0);
+        buffer[len]='\0';
+
+        string msg = buffer;
+
+        char hash_recv[200];
+        recv(clientsocket,hash_recv,sizeof(hash_recv),0);
+
+        string received_hash = hash_recv;
+
+        cout<<"Message received : "<<msg<<endl;
+        cout<<"Hash received : "<<received_hash<<endl;
+
+        string server_hash = sha256(msg);
+
+        cout<<"Hash computed : "<<server_hash<<endl;
+
+        if(server_hash == received_hash)
+            cout<<"Integrity Verified\n";
+        else
+            cout<<"Message Tampered\n";
+    }
+
+    close(clientsocket);
+    close(serversocket);
+}
+
+client.cpp (sha)
+
+#include "sha.h"
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <bits/stdc++.h>
+using namespace std;
+
+int main()
+{
+    int clientsocket = socket(AF_INET, SOCK_STREAM, 0);
+
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(8080);
+
+    inet_pton(AF_INET,"127.0.0.1",&addr.sin_addr);
+
+    connect(clientsocket,(sockaddr*)&addr,sizeof(addr));
+
+    while(true)
+    {
+        string msg;
+
+        cout<<"Client message : ";
+        getline(cin,msg);
+
+        int len = msg.length();
+
+        send(clientsocket,&len,sizeof(len),0);
+        send(clientsocket,msg.c_str(),len,0);
+
+        string hash = sha256(msg);
+
+        cout<<"Generated SHA256 hash : "<<hash<<endl;
+
+        send(clientsocket,hash.c_str(),hash.length()+1,0);
+
+        if(msg=="exit")
+            break;
+    }
+
+    close(clientsocket);
+}
