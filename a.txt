@@ -1,82 +1,131 @@
-def get_support(itemset, transactions):
-    count = 0
-    for t in transactions:
-        if all(i in t for i in itemset):
-            count += 1
-    return count / len(transactions)
+md5 header file(md5.h)
 
-def combinations(lst, r):
-    if r == 0:
-        return [[]]
-    result = []
-    for i in range(len(lst)):
-        for tail in combinations(lst[i+1:], r-1):
-            result.append([lst[i]] + tail)
-    return result
+#ifndef MD5_H
+#define MD5_H
 
-def generate_candidates(Lk, k):
-    candidates = []
-    n = len(Lk)
-    for i in range(n):
-        for j in range(i+1, n):
-            if Lk[i][:k-1] == Lk[j][:k-1]:
-                union = sorted(list(set(Lk[i]) | set(Lk[j])))
-                if union not in candidates and len(union) == k+1:
-                    valid = True
-                    for m in range(len(union)):
-                        subset = union[:m] + union[m+1:]
-                        if subset not in Lk:
-                            valid = False
-                            break
-                    if valid:
-                        candidates.append(union)
-    return candidates
+#include <openssl/md5.h>
+#include <string>
+#include <iomanip>
+#include <sstream>
 
-def apriori(transactions, min_sup):
-    items = sorted({i for t in transactions for i in t if not i.startswith("T")})
-    current_L = [[i] for i in items]
-    
-    all_frequent = {}
-    k = 1
-    while current_L:
-        Lk = []
-        for itemset in current_L:
-            sup = get_support(itemset, transactions)
-            if sup >= min_sup:
-                Lk.append(itemset)
-                all_frequent[tuple(itemset)] = sup
-        current_L = generate_candidates(Lk, k)
-        k += 1
-    return all_frequent
+using namespace std;
 
-def generate_association_rules(frequent_itemsets, min_conf=0.5):
-    rules = []
-    for itemset, sup in frequent_itemsets.items():
-        if len(itemset) < 2:
-            continue
-        for i in range(1, len(itemset)):
-            for left in combinations(list(itemset), i):
-                right = sorted(list(set(itemset) - set(left)))
-                conf = sup / frequent_itemsets.get(tuple(sorted(left)), 1e-9)
-                if conf >= min_conf:
-                    rules.append((left, right, sup, conf))
-    return rules
+string md5(string input)
+{
+    unsigned char digest[MD5_DIGEST_LENGTH];
 
-transactions = [
-    ["T1","a","b","c","e"],
-    ["T2","a","c","e"],
-    ["T3","b","d","f"],
-    ["T4","a","e","f"]
-]
+    MD5((unsigned char*)input.c_str(), input.length(), digest);
 
-min_sup = 0.5  
-frequent_itemsets = apriori(transactions, min_sup)
+    stringstream ss;
 
-print("Frequent Itemsets:")
-for itemset, sup in frequent_itemsets.items():
-    print(list(itemset), "->", round(sup*100,2), "%")
+    for(int i=0;i<MD5_DIGEST_LENGTH;i++)
+        ss<<hex<<setw(2)<<setfill('0')<<(int)digest[i];
 
-print("\nAssociation Rules (min_conf = 0.5):")
-rules = generate_association_rules(frequent_itemsets, min_conf=0.5)
-for left, right, sup, conf in rules:
-    print(f"{list(left)} -> {list(right)} | support={round(sup*100,2)}% | confidence={round(conf*100,2)}%")
+    return ss.str();
+}
+
+#endif
+
+server.cpp
+
+#include "md5.h"
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <bits/stdc++.h>
+using namespace std;
+
+int main()
+{
+    int serversocket = socket(AF_INET, SOCK_STREAM, 0);
+
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(8080);
+    addr.sin_addr.s_addr = INADDR_ANY;
+
+    bind(serversocket, (sockaddr*)&addr, sizeof(addr));
+    listen(serversocket, 0);
+
+    cout<<"Server listening...\n";
+
+    int clientsocket = accept(serversocket, nullptr, nullptr);
+
+    while(true)
+    {
+        int len;
+        recv(clientsocket, &len, sizeof(len), 0);
+
+        if(len==0) break;
+
+        char buffer[1024];
+        recv(clientsocket, buffer, len, 0);
+        buffer[len]='\0';
+
+        string msg = buffer;
+
+        char hash_recv[100];
+        recv(clientsocket, hash_recv, sizeof(hash_recv), 0);
+
+        string received_hash = hash_recv;
+
+        cout<<"Message received : "<<msg<<endl;
+        cout<<"Hash received : "<<received_hash<<endl;
+
+        string server_hash = md5(msg);
+
+        cout<<"Hash computed : "<<server_hash<<endl;
+
+        if(server_hash==received_hash)
+            cout<<"Integrity Verified\n";
+        else
+            cout<<"Message Tampered\n";
+    }
+
+    close(clientsocket);
+    close(serversocket);
+}
+
+client.cpp
+
+#include "md5.h"
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <bits/stdc++.h>
+using namespace std;
+
+int main()
+{
+    int clientsocket = socket(AF_INET, SOCK_STREAM, 0);
+
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(8080);
+
+    inet_pton(AF_INET,"127.0.0.1",&addr.sin_addr);
+
+    connect(clientsocket,(sockaddr*)&addr,sizeof(addr));
+
+    while(true)
+    {
+        string msg;
+
+        cout<<"Client message : ";
+        getline(cin,msg);
+
+        int len = msg.length();
+
+        send(clientsocket,&len,sizeof(len),0);
+        send(clientsocket,msg.c_str(),len,0);
+
+        string hash = md5(msg);
+
+        cout<<"Generated MD5 hash : "<<hash<<endl;
+
+        send(clientsocket,hash.c_str(),hash.length()+1,0);
+
+        if(msg=="exit")
+            break;
+    }
+
+    close(clientsocket);
+}
