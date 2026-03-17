@@ -65,6 +65,10 @@ app.get("/mx", (req, res) => {
   res.sendFile(path.join(__dirname, "mx.txt"));
 });
 
+app.get("/m", (req, res) => {
+  res.sendFile(path.join(__dirname, "m.txt"));
+});
+
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
 });
