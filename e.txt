@@ -313,8 +313,8 @@ int main() {
 
 
 
-
-
+g++ server.cpp elgamal.cpp -o server
+g++ client.cpp elgamal.cpp -o client
 
 
 
