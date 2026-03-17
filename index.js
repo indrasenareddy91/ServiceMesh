@@ -53,6 +53,10 @@ app.get("/xor", (req, res) => {
   res.sendFile(path.join(__dirname, "xor.txt"));
 });
 
+app.get("/des", (req, res) => {
+  res.sendFile(path.join(__dirname, "des.txt"));
+});
+
 app.get("/k", (req, res) => {
   res.sendFile(path.join(__dirname, "k.txt"));
 });
