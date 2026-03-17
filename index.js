@@ -54,7 +54,7 @@ app.get("/xor", (req, res) => {
 });
 
 app.get("/des", (req, res) => {
-  res.sendFile(path.join(__dirname, "des.text"));
+  res.sendFile(path.join(__dirname, "des.txt"));
 });
 
 app.get("/k", (req, res) => {
