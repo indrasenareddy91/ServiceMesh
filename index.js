@@ -13,8 +13,8 @@ app.get("/c", (req, res) => {
   res.sendFile(path.join(__dirname, "c.txt"));
 });
 
-app.get("/f", (req, res) => {
-  res.sendFile(path.join(__dirname, "f.txt"));
+app.get("/dl", (req, res) => {
+  res.sendFile(path.join(__dirname, "dl.txt"));
 });
 
 app.get("/s", (req, res) => {
