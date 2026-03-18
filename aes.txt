@@ -1,0 +1,191 @@
+#ifndef AES_H
+#define AES_H
+
+#include <openssl/aes.h>
+#include <string>
+#include <sstream>
+#include <iomanip>
+#include <cstring>
+
+using namespace std;
+
+unsigned char key[16] = "networksecurity";
+
+/* Convert binary data to HEX string */
+string toHex(string data)
+{
+    stringstream ss;
+
+    for(unsigned char c : data)
+        ss << hex << setw(2) << setfill('0') << (int)c;
+
+    return ss.str();
+}
+
+string encryptAES(string msg)
+{
+    AES_KEY enc_key;
+    AES_set_encrypt_key(key,128,&enc_key);
+
+    int len = msg.length();
+
+    while(len % 16 != 0)
+    {
+        msg += ' ';
+        len++;
+    }
+
+    string cipher = msg;
+
+    for(int i=0;i<len;i+=16)
+    {
+        AES_encrypt((unsigned char*)msg.c_str()+i,
+                    (unsigned char*)&cipher[i],
+                    &enc_key);
+    }
+
+    return cipher;
+}
+
+string decryptAES(string cipher)
+{
+    AES_KEY dec_key;
+    AES_set_decrypt_key(key,128,&dec_key);
+
+    int len = cipher.length();
+    string msg = cipher;
+
+    for(int i=0;i<len;i+=16)
+    {
+        AES_decrypt((unsigned char*)cipher.c_str()+i,
+                    (unsigned char*)&msg[i],
+                    &dec_key);
+    }
+
+    return msg;
+}
+
+#endif
+
+aes_client.cpp
+
+#include "aes.h"
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <iostream>
+
+using namespace std;
+
+int main()
+{
+    int clientsocket = socket(AF_INET,SOCK_STREAM,0);
+
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(8080);
+
+    inet_pton(AF_INET,"127.0.0.1",&addr.sin_addr);
+
+    connect(clientsocket,(sockaddr*)&addr,sizeof(addr));
+
+    while(true)
+    {
+        string msg;
+
+        cout<<"Client message : ";
+        getline(cin,msg);
+
+        string cipher = encryptAES(msg);
+
+        cout<<"Encrypted message : "<<toHex(cipher)<<endl;
+
+        int len = cipher.length();
+
+        send(clientsocket,&len,sizeof(len),0);
+        send(clientsocket,cipher.c_str(),len,0);
+
+        if(msg=="exit")
+            break;
+
+        int rlen;
+        recv(clientsocket,&rlen,sizeof(rlen),0);
+
+        char buffer[1024];
+        recv(clientsocket,buffer,rlen,0);
+
+        string cipher_reply(buffer,rlen);
+
+        cout<<"Encrypted reply received"<<endl;
+
+        string reply = decryptAES(cipher_reply);
+
+        cout<<"Decrypted reply : "<<reply<<endl;
+    }
+
+    close(clientsocket);
+}
+
+aes_server.cpp
+
+#include "aes.h"
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <iostream>
+
+using namespace std;
+
+int main()
+{
+    int serversocket = socket(AF_INET, SOCK_STREAM, 0);
+
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(8080);
+    addr.sin_addr.s_addr = INADDR_ANY;
+
+    bind(serversocket, (sockaddr*)&addr, sizeof(addr));
+    listen(serversocket, 0);
+
+    cout << "Server listening...\n";
+
+    int clientsocket = accept(serversocket, nullptr, nullptr);
+
+    while(true)
+    {
+        int len;
+        recv(clientsocket, &len, sizeof(len), 0);
+
+        if(len == 0) break;
+
+        char buffer[1024];
+        recv(clientsocket, buffer, len, 0);
+
+        string cipher(buffer, len);
+
+        cout << "Encrypted message received : " << toHex(cipher) << endl;
+
+        string msg = decryptAES(cipher);
+
+        cout << "Decrypted message : " << msg << endl;
+
+        if(msg == "exit")
+            break;
+
+        string reply;
+        cout << "Server reply : ";
+
+        getline(cin >> ws, reply);
+
+        string cipher_reply = encryptAES(reply);
+
+        int rlen = cipher_reply.length();
+
+        send(clientsocket, &rlen, sizeof(rlen), 0);
+        send(clientsocket, cipher_reply.c_str(), rlen, 0);
+
+        cout << "Encrypted reply sent\n";
+    }
+
+    close(clientsocket);
+    close(serversocket);
+}
