@@ -1,44 +1,269 @@
-from itertools import combinations
+aes1.txt
 
-def load_transactions(filename):
-    transactions = []
-    with open(filename, 'r') as f:
-        for line in f:
-            parts = line.strip().split()
-            if len(parts) > 1:
-                transactions.append(set(parts[1:]))  # skip TID
-    return transactions
+#ifndef AES_H
+#define AES_H
 
-def support_count(itemset, transactions):
-    return sum(1 for t in transactions if itemset.issubset(t))
+#include <bits/stdc++.h>
+using namespace std;
 
-def dfs_mfi(current_set, items, transactions, min_sup, MFI):
-    extended = False
-    for i, item in enumerate(items):
-        new_set = current_set | {item}
-        sup = support_count(new_set, transactions)
-        if sup >= min_sup:
-            extended = True
-            # Recurse on remaining items (to keep lexicographic order)
-            dfs_mfi(new_set, items[i+1:], transactions, min_sup, MFI)
-    if not extended:
-       
-        if not any(current_set < mfi for mfi in MFI):
-            # Remove any existing MFIs that are subsets of current_set
-            MFI[:] = [mfi for mfi in MFI if not (mfi < current_set)]
-            MFI.append(current_set)
+typedef unsigned char byte;
 
-def find_maximal_frequent_itemsets(filename, min_sup):
-    transactions = load_transactions(filename)
-    items = sorted({item for t in transactions for item in t})
-    MFI = []
-    dfs_mfi(set(), items, transactions, min_sup, MFI)
-    return MFI
+/* AES S-Box */
+byte sbox[256] = {
+99,124,119,123,242,107,111,197,48,1,103,43,254,215,171,118,
+202,130,201,125,250,89,71,240,173,212,162,175,156,164,114,192,
+183,253,147,38,54,63,247,204,52,165,229,241,113,216,49,21,
+4,199,35,195,24,150,5,154,7,18,128,226,235,39,178,117,
+9,131,44,26,27,110,90,160,82,59,214,179,41,227,47,132,
+83,209,0,237,32,252,177,91,106,203,190,57,74,76,88,207,
+208,239,170,251,67,77,51,133,69,249,2,127,80,60,159,168,
+81,163,64,143,146,157,56,245,188,182,218,33,16,255,243,210,
+205,12,19,236,95,151,68,23,196,167,126,61,100,93,25,115,
+96,129,79,220,34,42,144,136,70,238,184,20,222,94,11,219,
+224,50,58,10,73,6,36,92,194,211,172,98,145,149,228,121,
+231,200,55,109,141,213,78,169,108,86,244,234,101,122,174,8,
+186,120,37,46,28,166,180,198,232,221,116,31,75,189,139,138,
+112,62,181,102,72,3,246,14,97,53,87,185,134,193,29,158,
+225,248,152,17,105,217,142,148,155,30,135,233,206,85,40,223,
+140,161,137,13,191,230,66,104,65,153,45,15,176,84,187,22
+};
 
-if _name_ == "_main_":
-    filename = "td.txt" 
-    min_sup = 3       
-    MFI = find_maximal_frequent_itemsets(filename, min_sup)
-    print(f"Maximal Frequent Itemsets (min_sup={min_sup}):")
-    for m in MFI:
-        print(sorted(m))
+byte rcon[11]={0,1,2,4,8,16,32,64,128,27,54};
+
+byte gmul(byte a,byte b)
+{
+byte p=0;
+for(int i=0;i<8;i++)
+{
+if(b&1) p^=a;
+bool hi=a&0x80;
+a<<=1;
+if(hi) a^=0x1b;
+b>>=1;
+}
+return p;
+}
+
+/* SubBytes */
+void SubBytes(byte s[4][4])
+{
+for(int i=0;i<4;i++)
+for(int j=0;j<4;j++)
+s[i][j]=sbox[s[i][j]];
+}
+
+/* ShiftRows */
+void ShiftRows(byte s[4][4])
+{
+byte temp;
+
+temp=s[1][0];
+s[1][0]=s[1][1];
+s[1][1]=s[1][2];
+s[1][2]=s[1][3];
+s[1][3]=temp;
+
+swap(s[2][0],s[2][2]);
+swap(s[2][1],s[2][3]);
+
+temp=s[3][3];
+s[3][3]=s[3][2];
+s[3][2]=s[3][1];
+s[3][1]=s[3][0];
+s[3][0]=temp;
+}
+
+/* MixColumns */
+void MixColumns(byte s[4][4])
+{
+byte t[4];
+
+for(int i=0;i<4;i++)
+{
+t[0]=gmul(2,s[0][i])^gmul(3,s[1][i])^s[2][i]^s[3][i];
+t[1]=s[0][i]^gmul(2,s[1][i])^gmul(3,s[2][i])^s[3][i];
+t[2]=s[0][i]^s[1][i]^gmul(2,s[2][i])^gmul(3,s[3][i]);
+t[3]=gmul(3,s[0][i])^s[1][i]^s[2][i]^gmul(2,s[3][i]);
+
+for(int j=0;j<4;j++)
+s[j][i]=t[j];
+}
+}
+
+/* AddRoundKey */
+void AddRoundKey(byte s[4][4],byte key[16])
+{
+for(int i=0;i<4;i++)
+for(int j=0;j<4;j++)
+s[j][i]^=key[i*4+j];
+}
+
+/* AES Encryption */
+string encryptAES(string msg,string key)
+{
+byte state[4][4];
+
+while(msg.size()<16) msg+=' ';
+
+for(int i=0;i<16;i++)
+state[i%4][i/4]=msg[i];
+
+byte k[16];
+for(int i=0;i<16;i++) k[i]=key[i];
+
+AddRoundKey(state,k);
+
+for(int round=1;round<=9;round++)
+{
+SubBytes(state);
+ShiftRows(state);
+MixColumns(state);
+AddRoundKey(state,k);
+}
+
+SubBytes(state);
+ShiftRows(state);
+AddRoundKey(state,k);
+
+string cipher="";
+
+for(int i=0;i<4;i++)
+for(int j=0;j<4;j++)
+cipher+=state[j][i];
+
+return cipher;
+}
+
+/* Convert to HEX */
+string toHex(string s)
+{
+stringstream ss;
+for(unsigned char c:s)
+ss<<hex<<setw(2)<<setfill('0')<<(int)c;
+return ss.str();
+}
+
+#endif
+
+aes1_cleint.cpp
+
+#include "aes.h"
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <iostream>
+
+using namespace std;
+
+int main()
+{
+    int clientsocket = socket(AF_INET, SOCK_STREAM, 0);
+
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(8080);
+
+    inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
+
+    connect(clientsocket, (sockaddr*)&addr, sizeof(addr));
+
+    while(true)
+    {
+        string msg;
+
+        cout << "Client message : ";
+        getline(cin, msg);
+
+        string cipher = encryptAES(msg);
+
+        cout << "Cipher text : " << toHex(cipher) << endl;
+
+        int len = cipher.length();
+
+        send(clientsocket, &len, sizeof(len), 0);
+        send(clientsocket, cipher.c_str(), len, 0);
+
+        if(msg == "exit")
+            break;
+
+        int rlen;
+
+        recv(clientsocket, &rlen, sizeof(rlen), 0);
+
+        char buffer[1024];
+
+        recv(clientsocket, buffer, rlen, 0);
+
+        string reply(buffer, rlen);
+
+        cout << "Encrypted reply : " << toHex(reply) << endl;
+
+        string decrypted = decryptAES(reply);
+
+        cout << "Decrypted reply : " << decrypted << endl;
+    }
+
+    close(clientsocket);
+}
+
+aes1_server.cpp
+
+#include "aes.h"
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <iostream>
+
+using namespace std;
+
+int main()
+{
+    int serversocket = socket(AF_INET, SOCK_STREAM, 0);
+
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(8080);
+    addr.sin_addr.s_addr = INADDR_ANY;
+
+    bind(serversocket, (sockaddr*)&addr, sizeof(addr));
+    listen(serversocket, 0);
+
+    cout << "Server listening...\n";
+
+    int clientsocket = accept(serversocket, nullptr, nullptr);
+
+    while(true)
+    {
+        int len;
+
+        recv(clientsocket, &len, sizeof(len), 0);
+
+        char buffer[1024];
+
+        recv(clientsocket, buffer, len, 0);
+
+        string cipher(buffer, len);
+
+        cout << "Cipher received : " << toHex(cipher) << endl;
+
+        if(cipher == "exit")
+            break;
+
+        string msg = decryptAES(cipher);
+
+        cout << "Decrypted message : " << msg << endl;
+
+        string reply;
+
+        cout << "Server reply : ";
+        getline(cin >> ws, reply);
+
+        string enc = encryptAES(reply);
+
+        int rlen = enc.length();
+
+        send(clientsocket, &rlen, sizeof(rlen), 0);
+        send(clientsocket, enc.c_str(), rlen, 0);
+    }
+
+    close(clientsocket);
+    close(serversocket);
+}
