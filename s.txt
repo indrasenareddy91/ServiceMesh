@@ -1,64 +1,220 @@
-class SimpleSVM:
-    def __init__(self, lr=0.01, lambda_param=0.01, epochs=1000):
-        self.lr = lr
-        self.lambda_param = lambda_param
-        self.epochs = epochs
-        self.w = []
-        self.b = 0.0
+sha256.h
 
-    def dot(self, x, w):
-        return sum(x[i] * w[i] for i in range(len(x)))
+#ifndef SHA256_H
+#define SHA256_H
 
-    def fit(self, X, y):
-        
-        y = [-1 if label == 0 else 1 for label in y]
+#include <bits/stdc++.h>
+using namespace std;
 
-        n_samples = len(X)
-        n_features = len(X[0])
+typedef unsigned int uint32;
+typedef unsigned long long uint64;
 
-        self.w = [0.0 for _ in range(n_features)]
-        self.b = 0.0
+uint32 rotr(uint32 x,int n){ return (x>>n)|(x<<(32-n)); }
 
-        for _ in range(self.epochs):
-            for i in range(n_samples):
-                # Hinge condition: y_i * (w·x_i + b) < 1
-                condition = y[i] * (self.dot(X[i], self.w) + self.b) < 1
+uint32 ch(uint32 x,uint32 y,uint32 z){ return (x&y) ^ (~x&z); }
+uint32 maj(uint32 x,uint32 y,uint32 z){ return (x&y) ^ (x&z) ^ (y&z); }
 
-                if condition:
-                    # Misclassified / inside margin
-                    for j in range(n_features):
-                        self.w[j] += self.lr * (y[i] * X[i][j] - 2 * self.lambda_param * self.w[j])
-                    self.b += self.lr * y[i]
-                else:
-                    # Correctly classified
-                    for j in range(n_features):
-                        self.w[j] -= self.lr * 2 * self.lambda_param * self.w[j]
+uint32 ep0(uint32 x){ return rotr(x,2) ^ rotr(x,13) ^ rotr(x,22); }
+uint32 ep1(uint32 x){ return rotr(x,6) ^ rotr(x,11) ^ rotr(x,25); }
 
-    def predict(self, X):
-        preds = []
-        for x in X:
-            val = self.dot(x, self.w) + self.b  
-            preds.append(1 if val >= 0 else -1)
-        return preds
+uint32 sig0(uint32 x){ return rotr(x,7) ^ rotr(x,18) ^ (x>>3); }
+uint32 sig1(uint32 x){ return rotr(x,17) ^ rotr(x,19) ^ (x>>10); }
 
+uint32 k[64]={
+1116352408,1899447441,3049323471,3921009573,961987163,1508970993,
+2453635748,2870763221,3624381080,310598401,607225278,1426881987,
+1925078388,2162078206,2614888103,3248222580,3835390401,4022224774,
+264347078,604807628,770255983,1249150122,1555081692,1996064986,
+2554220882,2821834349,2952996808,3210313671,3336571891,3584528711,
+113926993,338241895,666307205,773529912,1294757372,1396182291,
+1695183700,1986661051,2177026350,2456956037,2730485921,2820302411,
+3259730800,3345764771,3516065817,3600352804,4094571909,275423344,
+430227734,506948616,659060556,883997877,958139571,1322822218,
+1537002063,1747873779,1955562222,2024104815,2227730452,2361852424,
+2428436474,2756734187,3204031479,3329325298
+};
 
-X = [
-    [2, 2],
-    [2, 3],
-    [3, 2],
-    [3, 3],
-    [4, 3],   
-    [10, 10],
-    [10, 11],
-    [11, 10],
-    [11, 11],
-    [12, 10]  
-]
+string sha256(string input)
+{
+uint32 h[8]={
+1779033703,3144134277,1013904242,2773480762,
+1359893119,2600822924,528734635,1541459225};
 
-y = [0, 0, 0, 0, 0,  1, 1, 1, 1, 1]
+vector<unsigned char> msg(input.begin(),input.end());
 
+uint64 bit_len = msg.size()*8;
 
-svm = SimpleSVM(lr=0.01, lambda_param=0.01, epochs=1000)
-svm.fit(X, y)
+msg.push_back(0x80);
 
-print("Predictions:", svm.predict(X))
+while((msg.size()*8)%512!=448)
+msg.push_back(0);
+
+for(int i=7;i>=0;i--)
+msg.push_back((bit_len>>(8*i)) & 0xFF);
+
+for(size_t chunk=0;chunk<msg.size();chunk+=64)
+{
+uint32 w[64];
+
+for(int i=0;i<16;i++)
+{
+w[i]=(msg[chunk+i*4]<<24) |
+(msg[chunk+i*4+1]<<16) |
+(msg[chunk+i*4+2]<<8) |
+(msg[chunk+i*4+3]);
+}
+
+for(int i=16;i<64;i++)
+w[i]=sig1(w[i-2])+w[i-7]+sig0(w[i-15])+w[i-16];
+
+uint32 a=h[0],b=h[1],c=h[2],d=h[3],
+e=h[4],f=h[5],g=h[6],hh=h[7];
+
+for(int i=0;i<64;i++)
+{
+uint32 t1 = hh + ep1(e) + ch(e,f,g) + k[i] + w[i];
+uint32 t2 = ep0(a) + maj(a,b,c);
+
+hh=g;
+g=f;
+f=e;
+e=d+t1;
+d=c;
+c=b;
+b=a;
+a=t1+t2;
+}
+
+h[0]+=a;
+h[1]+=b;
+h[2]+=c;
+h[3]+=d;
+h[4]+=e;
+h[5]+=f;
+h[6]+=g;
+h[7]+=hh;
+}
+
+stringstream ss;
+
+for(int i=0;i<8;i++)
+ss<<hex<<setw(8)<<setfill('0')<<h[i];
+
+return ss.str();
+}
+
+#endif
+
+sha_server.cpp
+
+#include "sha256.h"
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <iostream>
+
+using namespace std;
+
+int main()
+{
+int serversocket = socket(AF_INET,SOCK_STREAM,0);
+
+sockaddr_in addr{};
+addr.sin_family = AF_INET;
+addr.sin_port = htons(8080);
+addr.sin_addr.s_addr = INADDR_ANY;
+
+bind(serversocket,(sockaddr*)&addr,sizeof(addr));
+listen(serversocket,0);
+
+cout<<"Server listening...\n";
+
+int clientsocket = accept(serversocket,nullptr,nullptr);
+
+while(true)
+{
+int len;
+recv(clientsocket,&len,sizeof(len),0);
+
+if(len<=0) break;
+
+char buffer[1024];
+recv(clientsocket,buffer,len,0);
+buffer[len]='\0';
+
+string msg = buffer;
+
+if(msg=="exit")
+{
+cout<<"Client requested termination\n";
+break;
+}
+
+char hash_recv[200];
+recv(clientsocket,hash_recv,sizeof(hash_recv),0);
+
+string received_hash = hash_recv;
+
+cout<<"Message received : "<<msg<<endl;
+cout<<"Hash received : "<<received_hash<<endl;
+
+string server_hash = sha256(msg);
+
+cout<<"Computed hash : "<<server_hash<<endl;
+
+if(server_hash==received_hash)
+cout<<"Integrity Verified\n";
+else
+cout<<"Message Tampered\n";
+
+cout<<endl;
+}
+
+close(clientsocket);
+close(serversocket);
+}
+
+sha_client.cpp
+
+#include "sha256.h"
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <iostream>
+
+using namespace std;
+
+int main()
+{
+int clientsocket = socket(AF_INET,SOCK_STREAM,0);
+
+sockaddr_in addr{};
+addr.sin_family = AF_INET;
+addr.sin_port = htons(8080);
+
+inet_pton(AF_INET,"127.0.0.1",&addr.sin_addr);
+
+connect(clientsocket,(sockaddr*)&addr,sizeof(addr));
+
+while(true)
+{
+string msg;
+
+cout<<"Client message : ";
+getline(cin,msg);
+
+int len = msg.length();
+
+send(clientsocket,&len,sizeof(len),0);
+send(clientsocket,msg.c_str(),len,0);
+
+if(msg=="exit")
+break;
+
+string hash = sha256(msg);
+
+cout<<"Generated SHA256 hash : "<<hash<<endl;
+
+send(clientsocket,hash.c_str(),hash.length()+1,0);
+}
+
+close(clientsocket);
+}
