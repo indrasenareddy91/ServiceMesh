@@ -1,170 +1,222 @@
-import random
-import math
+rsa.h
 
-# -----------------------------
-# Decision Tree Components
-# -----------------------------
+#ifndef RSA_H
+#define RSA_H
 
-class TreeNode:
-    def __init__(self, attribute=None, label=None):
-        self.attribute = attribute
-        self.label = label
-        self.children = {}
+#include <bits/stdc++.h>
+using namespace std;
 
-def majority_class(data):
-    counts = {}
-    for row in data:
-        label = row[-1]
-        counts[label] = counts.get(label, 0) + 1
-    return max(counts, key=counts.get)
+/* Fast Modular Exponentiation */
+long long modexp(long long base,long long exp,long long mod)
+{
+long long res=1;
 
-def entropy(data):
-    counts = {}
-    for row in data:
-        label = row[-1]
-        counts[label] = counts.get(label, 0) + 1
-    total = len(data)
-    ent = 0.0
-    for count in counts.values():
-        p = count / total
-        ent -= p * math.log2(p)
-    return ent
+while(exp>0)
+{
+if(exp&1)
+res=(res*base)%mod;
 
-def info_gain(data, attr_index):
-    total_entropy = entropy(data)
-    partitions = {}
-    for row in data:
-        key = row[attr_index]
-        if key not in partitions:
-            partitions[key] = []
-        partitions[key].append(row)
-    weighted_entropy = 0.0
-    total = len(data)
-    for subset in partitions.values():
-        weighted_entropy += (len(subset) / total) * entropy(subset)
-    return total_entropy - weighted_entropy
+base=(base*base)%mod;
+exp>>=1;
+}
 
-def choose_best_attribute(data, attributes):
-    best_gain = -1
-    best_attr = None
-    for attr in attributes:
-        gain = info_gain(data, attr)
-        if gain > best_gain:
-            best_gain = gain
-            best_attr = attr
-    return best_attr
+return res;
+}
 
-def generate_decision_tree(data, attributes):
-    classes = [row[-1] for row in data]
-    if all(c == classes[0] for c in classes):
-        return TreeNode(label=classes[0])
+/* GCD */
+long long gcd(long long a,long long b)
+{
+if(b==0) return a;
+return gcd(b,a%b);
+}
 
-    if not attributes:
-        return TreeNode(label=majority_class(data))
+/* Modular inverse */
+long long modinv(long long e,long long phi)
+{
+for(long long d=1;d<phi;d++)
+if((e*d)%phi==1)
+return d;
 
-    best_attr = choose_best_attribute(data, attributes)
-    root = TreeNode(attribute=best_attr)
+return -1;
+}
 
-    values = set(row[best_attr] for row in data)
-    new_attributes = [a for a in attributes if a != best_attr]
+#endif
 
-    for value in values:
-        subset = [row for row in data if row[best_attr] == value]
-        if not subset:
-            root.children[value] = TreeNode(label=majority_class(data))
-        else:
-            root.children[value] = generate_decision_tree(subset, new_attributes)
+rsa_client.cpp
 
-    return root
+#include "rsa.h"
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <iostream>
 
-# -----------------------------
-# Random Forest Implementation
-# -----------------------------
+using namespace std;
 
-def bootstrap_sample(data):
-    """Generate a bootstrap sample (sampling with replacement)."""
-    n = len(data)
-    return [random.choice(data) for _ in range(n)]
+long long e,n;
 
-def random_subset(attributes, k):
-    """Choose k random attributes (feature bagging)."""
-    return random.sample(attributes, k)
+int main()
+{
 
-def predict_tree(node, row):
-    """Predict class label for one row using a trained tree."""
-    while node.label is None:
-        value = row[node.attribute]
-        if value in node.children:
-            node = node.children[value]
-        else:
-            # unseen value → majority fallback
-            return None
-    return node.label
+int clientsocket=socket(AF_INET,SOCK_STREAM,0);
 
-def random_forest_train(data, attributes, n_trees=5, m_features=None):
-    """Train Random Forest with n_trees using random feature subsets."""
-    if m_features is None:
-        m_features = int(math.sqrt(len(attributes))) or 1
+sockaddr_in addr{};
+addr.sin_family=AF_INET;
+addr.sin_port=htons(8080);
 
-    forest = []
-    for _ in range(n_trees):
-        sample = bootstrap_sample(data)
-        subset_attrs = random_subset(attributes, m_features)
-        tree = generate_decision_tree(sample, subset_attrs)
-        forest.append(tree)
-    return forest
+inet_pton(AF_INET,"127.0.0.1",&addr.sin_addr);
 
-def random_forest_predict(forest, row):
-    """Predict label using majority vote from all trees."""
-    votes = {}
-    for tree in forest:
-        pred = predict_tree(tree, row)
-        if pred is not None:
-            votes[pred] = votes.get(pred, 0) + 1
-    if not votes:
-        return None
-    return max(votes, key=votes.get)
+connect(clientsocket,(sockaddr*)&addr,sizeof(addr));
 
-def print_tree(node, depth=0):
-    if node.label is not None:
-        print("  " * depth + "Leaf:", node.label)
-    else:
-        print("  " * depth + f"Attribute {node.attribute}")
-        for value, child in node.children.items():
-            print("  " * (depth + 1) + f"Value = {value}")
-            print_tree(child, depth + 2)
+/* Receive public key */
+recv(clientsocket,&e,sizeof(e),0);
+recv(clientsocket,&n,sizeof(n),0);
 
-# -----------------------------
-# Example Usage
-# -----------------------------
+while(true)
+{
 
-if __name__ == "__main__":
-    data = [
-        ['Sunny', 'Hot', 'High', 'Weak', 'No'],
-        ['Sunny', 'Hot', 'High', 'Strong', 'No'],
-        ['Overcast', 'Hot', 'High', 'Weak', 'Yes'],
-        ['Rain', 'Mild', 'High', 'Weak', 'Yes'],
-        ['Rain', 'Cool', 'Normal', 'Weak', 'Yes'],
-        ['Rain', 'Cool', 'Normal', 'Strong', 'No'],
-        ['Overcast', 'Cool', 'Normal', 'Strong', 'Yes'],
-        ['Sunny', 'Mild', 'High', 'Weak', 'No'],
-        ['Sunny', 'Cool', 'Normal', 'Weak', 'Yes'],
-        ['Rain', 'Mild', 'Normal', 'Weak', 'Yes'],
-        ['Sunny', 'Mild', 'Normal', 'Strong', 'Yes'],
-        ['Overcast', 'Mild', 'High', 'Strong', 'Yes'],
-        ['Overcast', 'Hot', 'Normal', 'Weak', 'Yes'],
-        ['Rain', 'Mild', 'High', 'Strong', 'No']
-    ]
+string msg;
 
-    attributes = [0, 1, 2, 3]
+cout<<"Client message : ";
+getline(cin,msg);
 
-    forest = random_forest_train(data, attributes, n_trees=5)
+int len=msg.length();
 
-    # Print first tree
-    print("Example Tree Structure:")
-    print_tree(forest[0])
+send(clientsocket,&len,sizeof(len),0);
 
-    # Test prediction
-    test_sample = ['Sunny', 'Cool', 'High', 'Strong']
-    pred = random_forest_predict(forest, test_sample)
-    print("\nPredicted class for", test_sample, "=>", pred)
+for(char ch:msg)
+{
+
+long long cipher = modexp(ch,e,n);
+
+cout<<"Encrypted sent : "<<cipher<<endl;
+
+send(clientsocket,&cipher,sizeof(cipher),0);
+
+}
+
+if(msg=="exit") break;
+
+int rlen;
+
+recv(clientsocket,&rlen,sizeof(rlen),0);
+
+string reply="";
+
+for(int i=0;i<rlen;i++)
+{
+
+long long cipher;
+
+recv(clientsocket,&cipher,sizeof(cipher),0);
+
+cout<<"Encrypted received : "<<cipher<<endl;
+
+char ch = modexp(cipher,e,n);
+
+reply+=ch;
+
+}
+
+cout<<"Decrypted reply : "<<reply<<endl;
+
+}
+
+close(clientsocket);
+
+}
+
+rsa_server.cpp
+
+#include "rsa.h"
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <iostream>
+
+using namespace std;
+
+long long p=61;
+long long q=53;
+
+long long n=p*q;
+long long phi=(p-1)*(q-1);
+
+long long e=17;
+long long d;
+
+int main()
+{
+
+d=modinv(e,phi);
+
+int serversocket=socket(AF_INET,SOCK_STREAM,0);
+
+sockaddr_in addr{};
+addr.sin_family=AF_INET;
+addr.sin_port=htons(8080);
+addr.sin_addr.s_addr=INADDR_ANY;
+
+bind(serversocket,(sockaddr*)&addr,sizeof(addr));
+listen(serversocket,0);
+
+cout<<"Server listening...\n";
+
+int clientsocket=accept(serversocket,nullptr,nullptr);
+
+/* Send public key */
+send(clientsocket,&e,sizeof(e),0);
+send(clientsocket,&n,sizeof(n),0);
+
+while(true)
+{
+
+int len;
+
+recv(clientsocket,&len,sizeof(len),0);
+
+if(len==0) break;
+
+string msg="";
+
+for(int i=0;i<len;i++)
+{
+
+long long cipher;
+
+recv(clientsocket,&cipher,sizeof(cipher),0);
+
+cout<<"Encrypted received : "<<cipher<<endl;
+
+char ch = modexp(cipher,d,n);
+
+msg+=ch;
+}
+
+cout<<"Decrypted message : "<<msg<<endl;
+
+if(msg=="exit") break;
+
+string reply;
+
+cout<<"Server reply : ";
+getline(cin>>ws,reply);
+
+int rlen=reply.length();
+
+send(clientsocket,&rlen,sizeof(rlen),0);
+
+for(char ch:reply)
+{
+
+long long cipher = modexp(ch,e,n);
+
+cout<<"Encrypted sent : "<<cipher<<endl;
+
+send(clientsocket,&cipher,sizeof(cipher),0);
+
+}
+
+}
+
+close(clientsocket);
+close(serversocket);
+
+}
