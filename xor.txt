@@ -1,92 +1,191 @@
-import math
-import random
+#ifndef AES_H
+#define AES_H
 
-# --- Helper functions ---
-def sigmoid(x):
-    return 1 / (1 + math.exp(-x))
+#include <openssl/aes.h>
+#include <string>
+#include <sstream>
+#include <iomanip>
+#include <cstring>
 
-def sigmoid_derivative(x):
-    return x * (1 - x)
+using namespace std;
 
-# --- XOR dataset ---
-X = [[0, 0],
-     [0, 1],
-     [1, 0],
-     [1, 1]]
+unsigned char key[16] = "networksecurity";
 
-y = [0, 1, 1, 0]
+/* Convert binary data to HEX string */
+string toHex(string data)
+{
+    stringstream ss;
 
-# --- Initialize weights and biases randomly ---
-random.seed(42)
-W1 = [[random.uniform(-1, 1), random.uniform(-1, 1)],   # 2x2
-      [random.uniform(-1, 1), random.uniform(-1, 1)]]
-b1 = [0, 0]
+    for(unsigned char c : data)
+        ss << hex << setw(2) << setfill('0') << (int)c;
 
-W2 = [random.uniform(-1, 1), random.uniform(-1, 1)]     # 2x1
-b2 = 0
+    return ss.str();
+}
 
-lr = 0.1  # learning rate
+string encryptAES(string msg)
+{
+    AES_KEY enc_key;
+    AES_set_encrypt_key(key,128,&enc_key);
 
-# --- Training loop ---
-for epoch in range(10000):
-    total_loss = 0
-    for i in range(len(X)):
-        # ---- Forward pass ----
-        x1, x2 = X[i]
-        target = y[i]
+    int len = msg.length();
 
-        # Hidden layer
-        z1 = x1 * W1[0][0] + x2 * W1[1][0] + b1[0]
-        z2 = x1 * W1[0][1] + x2 * W1[1][1] + b1[1]
-        a1 = sigmoid(z1)
-        a2 = sigmoid(z2)
+    while(len % 16 != 0)
+    {
+        msg += ' ';
+        len++;
+    }
 
-        # Output layer
-        z3 = a1 * W2[0] + a2 * W2[1] + b2
-        output = sigmoid(z3)
+    string cipher = msg;
 
-        # ---- Compute loss ----
-        loss = (target - output) ** 2
-        total_loss += loss
+    for(int i=0;i<len;i+=16)
+    {
+        AES_encrypt((unsigned char*)msg.c_str()+i,
+                    (unsigned char*)&cipher[i],
+                    &enc_key);
+    }
 
-        # ---- Backpropagation ----
-        d_output = 2 * (output - target) * sigmoid_derivative(output)
+    return cipher;
+}
 
-        d_W2 = [d_output * a1, d_output * a2]
-        d_b2 = d_output
+string decryptAES(string cipher)
+{
+    AES_KEY dec_key;
+    AES_set_decrypt_key(key,128,&dec_key);
 
-        d_a1 = d_output * W2[0] * sigmoid_derivative(a1)
-        d_a2 = d_output * W2[1] * sigmoid_derivative(a2)
+    int len = cipher.length();
+    string msg = cipher;
 
-        d_W1 = [
-            [d_a1 * x1, d_a2 * x1],
-            [d_a1 * x2, d_a2 * x2]
-        ]
-        d_b1 = [d_a1, d_a2]
+    for(int i=0;i<len;i+=16)
+    {
+        AES_decrypt((unsigned char*)cipher.c_str()+i,
+                    (unsigned char*)&msg[i],
+                    &dec_key);
+    }
 
-        # ---- Update weights ----
-        W2[0] -= lr * d_W2[0]
-        W2[1] -= lr * d_W2[1]
-        b2 -= lr * d_b2
+    return msg;
+}
 
-        W1[0][0] -= lr * d_W1[0][0]
-        W1[0][1] -= lr * d_W1[0][1]
-        W1[1][0] -= lr * d_W1[1][0]
-        W1[1][1] -= lr * d_W1[1][1]
-        b1[0] -= lr * d_b1[0]
-        b1[1] -= lr * d_b1[1]
+#endif
 
-    if epoch % 1000 == 0:
-        print(f"Epoch {epoch}, Loss: {total_loss / 4:.4f}")
+aes_client.cpp
 
-# --- Testing the network ---
-print("\nFinal Predictions:")
-for i in range(len(X)):
-    x1, x2 = X[i]
-    z1 = x1 * W1[0][0] + x2 * W1[1][0] + b1[0]
-    z2 = x1 * W1[0][1] + x2 * W1[1][1] + b1[1]
-    a1 = sigmoid(z1)
-    a2 = sigmoid(z2)
-    z3 = a1 * W2[0] + a2 * W2[1] + b2
-    output = sigmoid(z3)
-    print(f"{X[i]} -> {round(output)} ({output:.4f})")
+#include "aes.h"
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <iostream>
+
+using namespace std;
+
+int main()
+{
+    int clientsocket = socket(AF_INET,SOCK_STREAM,0);
+
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(8080);
+
+    inet_pton(AF_INET,"127.0.0.1",&addr.sin_addr);
+
+    connect(clientsocket,(sockaddr*)&addr,sizeof(addr));
+
+    while(true)
+    {
+        string msg;
+
+        cout<<"Client message : ";
+        getline(cin,msg);
+
+        string cipher = encryptAES(msg);
+
+        cout<<"Encrypted message : "<<toHex(cipher)<<endl;
+
+        int len = cipher.length();
+
+        send(clientsocket,&len,sizeof(len),0);
+        send(clientsocket,cipher.c_str(),len,0);
+
+        if(msg=="exit")
+            break;
+
+        int rlen;
+        recv(clientsocket,&rlen,sizeof(rlen),0);
+
+        char buffer[1024];
+        recv(clientsocket,buffer,rlen,0);
+
+        string cipher_reply(buffer,rlen);
+
+        cout<<"Encrypted reply received"<<endl;
+
+        string reply = decryptAES(cipher_reply);
+
+        cout<<"Decrypted reply : "<<reply<<endl;
+    }
+
+    close(clientsocket);
+}
+
+aes_server.cpp
+
+#include "aes.h"
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <iostream>
+
+using namespace std;
+
+int main()
+{
+    int serversocket = socket(AF_INET, SOCK_STREAM, 0);
+
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(8080);
+    addr.sin_addr.s_addr = INADDR_ANY;
+
+    bind(serversocket, (sockaddr*)&addr, sizeof(addr));
+    listen(serversocket, 0);
+
+    cout << "Server listening...\n";
+
+    int clientsocket = accept(serversocket, nullptr, nullptr);
+
+    while(true)
+    {
+        int len;
+        recv(clientsocket, &len, sizeof(len), 0);
+
+        if(len == 0) break;
+
+        char buffer[1024];
+        recv(clientsocket, buffer, len, 0);
+
+        string cipher(buffer, len);
+
+        cout << "Encrypted message received : " << toHex(cipher) << endl;
+
+        string msg = decryptAES(cipher);
+
+        cout << "Decrypted message : " << msg << endl;
+
+        if(msg == "exit")
+            break;
+
+        string reply;
+        cout << "Server reply : ";
+
+        getline(cin >> ws, reply);
+
+        string cipher_reply = encryptAES(reply);
+
+        int rlen = cipher_reply.length();
+
+        send(clientsocket, &rlen, sizeof(rlen), 0);
+        send(clientsocket, cipher_reply.c_str(), rlen, 0);
+
+        cout << "Encrypted reply sent\n";
+    }
+
+    close(clientsocket);
+    close(serversocket);
+}
