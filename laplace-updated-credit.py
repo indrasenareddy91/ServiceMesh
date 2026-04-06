@@ -1,85 +1,73 @@
-import pandas as pd
 import numpy as np
-import math
-import random
+import pandas as pd
+import matplotlib.pyplot as plt
 
-df = pd.read_csv("UCI_Credit_Card.csv")
+# Load dataset
+df = pd.read_csv("healthcare_dataset.csv")
 
-epsilon = 0.5
+# Disease we want to query
+disease_name = "Diabetes"
 
-print("========== LAPLACE MECHANISM IMPLEMENTATION ==========")
-
-def laplace_noise(sensitivity, epsilon):
-
-    b = sensitivity / epsilon
-
-    U = random.uniform(-0.5, 0.5)
-
-    noise = -b * np.sign(U) * math.log(1 - 2 * abs(U))
-
-    return noise
-
-
-print("\n----- COUNT QUERY -----")
-
-true_count = df["default.payment.next.month"].sum()
-
-sensitivity_count = 1
-
-noise_count = laplace_noise(sensitivity_count, epsilon)
-
-noisy_count = true_count + noise_count
-
-print("True Default Count :", true_count)
-print("Noise Added        :", noise_count)
-print("Noisy Default Count:", noisy_count)
-
-print("\n----- AVERAGE QUERY -----")
-
-true_avg = df["LIMIT_BAL"].mean()
-
-max_val = df["LIMIT_BAL"].max()
-min_val = df["LIMIT_BAL"].min()
-
+# Compute true statistics
+true_count = (df["Medical Condition"] == disease_name).sum()
 n = len(df)
 
-sensitivity_avg = (max_val - min_val) / n
-
-noise_avg = laplace_noise(sensitivity_avg, epsilon)
-
-noisy_avg = true_avg + noise_avg
-
-print("True Average LIMIT_BAL :", true_avg)
-print("Noise Added            :", noise_avg)
-print("Noisy Average LIMIT_BAL:", noisy_avg)
-
-print("\n----- ADDING LAPLACE NOISE TO DATASET -----")
-
-numeric_columns = [
-    "LIMIT_BAL","AGE",
-    "BILL_AMT1","BILL_AMT2","BILL_AMT3",
-    "BILL_AMT4","BILL_AMT5","BILL_AMT6",
-    "PAY_AMT1","PAY_AMT2","PAY_AMT3",
-    "PAY_AMT4","PAY_AMT5","PAY_AMT6"
-]
-
-df_noisy = df.copy()
-
-for col in numeric_columns:
-
-    sensitivity = df[col].max() - df[col].min()
-
-    noisy_values = []
-
-    for value in df[col]:
-
-        noise = laplace_noise(sensitivity, epsilon)
-
-        noisy_values.append(value + noise)
-
-    df_noisy[col] = noisy_values
+print("Total records:", n)
+print(f"True count of {disease_name}:", true_count)
+print("True proportion:", true_count / n)
 
 
-df_noisy.to_csv("credit_data_noisy_manual_laplace.csv", index=False)
+# Laplace Mechanism Function
+def laplace_mechanism(true_value, sensitivity, epsilon):
 
-print("Noisy dataset saved as: credit_data_noisy_manual_laplace.csv")
+    scale = sensitivity / epsilon
+    noise = np.random.laplace(0, scale)
+
+    return true_value + noise
+
+
+# Different epsilon values
+epsilon_values = [0.1, 0.5, 1.0, 2.0]
+
+print("\nDifferentially Private Results:\n")
+
+for eps in epsilon_values:
+
+    noisy_count = laplace_mechanism(
+        true_value=true_count,
+        sensitivity=1,
+        epsilon=eps
+    )
+
+    noisy_proportion = noisy_count / n
+
+    print(f"Epsilon = {eps}")
+    print("  Noisy Count     :", round(noisy_count, 2))
+    print("  Noisy Proportion:", round(noisy_proportion, 4))
+    print()
+
+
+# -----------------------------
+# Plot Laplace Distributions
+# -----------------------------
+
+x = np.linspace(-10, 10, 500)
+
+plt.figure(figsize=(8,5))
+
+for eps in epsilon_values:
+
+    scale = 1 / eps   # sensitivity = 1
+
+    # Laplace PDF
+    y = (1/(2*scale)) * np.exp(-np.abs(x)/scale)
+
+    plt.plot(x, y, label=f"ε = {eps}")
+
+plt.title("Laplace Noise Distribution for Different ε")
+plt.xlabel("Noise Value")
+plt.ylabel("Probability Density")
+plt.legend()
+plt.grid()
+
+plt.show()
