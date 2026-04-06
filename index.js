@@ -9,7 +9,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const routes = {
-  "/e": "exponential_mech.ipynb",
+  "/e": "e.py",
   "/r": "randomized_response.py",
   "/l": "laplace-updated-credit.py",
   "/t": "t-closeness.py",
