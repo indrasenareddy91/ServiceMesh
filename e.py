@@ -1,43 +1,80 @@
+[08/04, 8:37 am] G.Vineeth: // CLIENT
+#include <iostream>
+#include <thread>
+#include <arpa/inet.h>
+#include <unistd.h>
+using namespace std;
 
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
+int main() {
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
 
-# Read dataset
-data = pd.read_csv(r"medical.csv")
+    sockaddr_in server{};
+    server.sin_family = AF_INET;
+    server.sin_port = htons(8080);
+    inet_pton(AF_INET, "127.0.0.1", &server.sin_addr);
 
-# Privacy parameters
-epsilon = 1.0
-sensitivity = 1
+    connect(sock, (sockaddr*)&server, sizeof(server));
 
-# Exponential mechanism function
-def exponential_mechanism(categories, utilities, epsilon, sensitivity):
-    scores = np.exp((epsilon * utilities) / (2 * sensitivity))
-    probabilities = scores / np.sum(scores)
-    selected = np.random.choice(categories, p=probabilities)
-    return selected, probabilities
+    // receive thread
+    thread t([&]() {
+        char buffer[1024];
+        while (true) {
+            int n = read(sock, buffer, sizeof(buffer));
+            if (n > 0) {
+                cout << "\nMessage: " << string(buffer, n) << endl;
+            }
+        }
+    });
 
-# Candidate outputs (possible categories)
-conditions = data["Medical Condition"].unique()
+    // send messages
+    while (true) {
+        string msg;
+        getline(cin, msg);
 
-# Utility of each category = frequency count in the dataset
-utilities = data["Medical Condition"].value_counts().reindex(conditions).values
+        write(sock, msg.c_str(), msg.size());
+    }
+}
+[08/04, 8:37 am] G.Vineeth: #include <iostream>
+#include <thread>
+#include <vector>
+#include <arpa/inet.h>
+#include <unistd.h>
+using namespace std;
 
-# Run exponential mechanism
-selected_condition, probabilities = exponential_mechanism(
-    conditions, utilities, epsilon, sensitivity
-)
+vector<int> clients;
 
-# Print results
-print("\nDifferential Privacy using Exponential Mechanism\n")
-print("Categories:", conditions)
-print("Utility Scores:", utilities)
-print("Selection Probabilities:", probabilities)
-print("Selected Output:", selected_condition)
+void handleclient(int sock){
+    char buffer[1024];
+    
+    while(true){
+        int n = read(sock, buffer, sizeof(buffer));
+        if (n <= 0) break;
+        
+        for(int c : clients){
+            if(c!=sock){
+                write(c,buffer,n);
+            }
+        }
+    }
+    
+    close(sock);
+}
 
-# Plot probabilities
-plt.bar(conditions, probabilities)
-plt.xlabel("Medical Condition")
-plt.ylabel("Selection Probability")
-plt.title("Probability Distribution of Exponential Mechanism")
-plt.show()
+int main(){
+    int server = socket(AF_INET,SOCK_STREAM,0);
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(8080);
+    addr.sin_addr.s_addr = INADDR_ANY;
+    
+    bind(server, (sockaddr*)&addr, sizeof(addr));
+    listen(server, 5);
+    
+    cout << "Server started : ";
+    while(true){
+        int client = accept(server, NULL, NULL);
+        clients.push_back(client);
+        
+        thread(handleclient, client).detach();
+    }
+}
